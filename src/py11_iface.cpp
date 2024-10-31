@@ -36,8 +36,8 @@ PYBIND11_MODULE(BPOTF, BPOTF) {
             py::arg("code_type") = OBPOTF::ENoiseType_t::E_CC,   // Noise model type. Default: E_CC
             py::arg("transfer_mat") = nullptr   // Transfer matrix
          )
-      .def("print_object", &OBPOTF::print_object)
       .def("otf_uf", py::overload_cast<py::array_t<double, C_FMT> const &>(&OBPOTF::otf_uf))
-      .def("decode", &OBPOTF::decode);
+      .def("decode", &OBPOTF::decode)
+      .def("print_object", &OBPOTF::print_object);
 
 }

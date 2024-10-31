@@ -19,7 +19,9 @@ license = { file = "LICENSE" }
 
 requires-python = ">=3.8"
 dependencies = [
-   "scipy"
+   "scipy",
+   "stimbposd",
+   "stim"
 ]
 version = "0.0.1"
 
