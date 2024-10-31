@@ -63,7 +63,9 @@ class OCSC
          return m_u64_nnz;
       };
 
-      std::vector<std::vector<uint8_t>> expand(void);
+      std::vector<std::vector<uint8_t>> expand_to_mat(void);
+
+      std::vector<uint8_t> expand_to_column_major(void);
 
       uint64_t get_col_nnz(uint64_t const & u64_col);
 

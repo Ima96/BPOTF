@@ -263,7 +263,7 @@ void OCSC::print_csc(void)
 
 }
 
-std::vector<std::vector<uint8_t>> OCSC::expand(void)
+std::vector<std::vector<uint8_t>> OCSC::expand_to_mat(void)
 {
    std::vector<std::vector<uint8_t>> res_mat(m_u64_m, std::vector<uint8_t>(m_u64_n, 0U));
 
@@ -277,6 +277,22 @@ std::vector<std::vector<uint8_t>> OCSC::expand(void)
    }
 
    return res_mat;
+}
+
+std::vector<uint8_t> OCSC::expand_to_column_major(void)
+{
+   std::vector<uint8_t> res_vec(m_u64_m * m_u64_n, 0U);
+
+   for (uint64_t i = 1U; i < m_u64_n+1; i++)
+   {
+      for (uint64_t j = m_pu64_indptr[i-1]; j < m_pu64_indptr[i]; j++)
+      {
+         uint64_t row_idx = m_pu64_r_indices[j];
+         res_vec[((i-1)*m_u64_m)+row_idx] = 1U;
+      }
+   }
+
+   return res_vec;
 }
 
 uint64_t OCSC::get_col_nnz(uint64_t const & u64_col)
