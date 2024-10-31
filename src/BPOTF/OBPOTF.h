@@ -50,15 +50,37 @@ class OBPOTF
    //! Matrix in Compressed-Sparse-Column format.
    OCSC * m_po_csc_mat = nullptr;
 
-   //! Transfer matrix in case a DEM is provided.
-   OCSC * m_po_transfer_csc_mat = nullptr;
+   typedef struct SDemData
+   {
+      //! Transfer matrix in case a DEM is provided.
+      OCSC * po_transfer_csc_mat = nullptr;
+
+      //!< Observables CSC matrix in case DEM is provided.
+      OCSC * po_obs_csc_mat = nullptr;
+
+      //!< Phenomenological CSC matrix of the pcm.
+      OCSC * po_phen_pcm_csc = nullptr;
+
+      //!< Phenomenological CSC matrix of the observables.
+      OCSC * po_phen_obs_csc = nullptr;
+
+     //!< Array of prior probabilities
+     std::span<double> af64_priors; 
+
+   } SDemData_t;
+
+   SDemData_t * m_ps_dem_data = nullptr;
 
    //! Pointer to the pcm in format for BpDecoder object
-   ldpc::bp::BpSparse * m_po_bpsparse = nullptr;
-   //! Pointer to primary BP decoder object.
-   ldpc::bp::BpDecoder * m_po_primary_bp = nullptr;
-   //! Pointer to secondary BP decoder in case the first one fails and Kruskal is needed. 
-   ldpc::bp::BpDecoder * m_po_secondary_bp = nullptr;
+   ldpc::bp::BpSparse * m_po_bpsparse_pcm = nullptr;
+   //! Pointer to the phenomenological pcm in format for BpDecoder object
+   ldpc::bp::BpSparse * m_po_bpsparse_phen = nullptr;
+   //! Pointer to BP decoder object to use it against the pcm.
+   ldpc::bp::BpDecoder * m_po_pcm_bp = nullptr;
+   //! Pointer to BP decoder object to use it against the phenomenological pcm in case there is one.
+   ldpc::bp::BpDecoder * m_po_phen_bp = nullptr;
+   //! Pointer to BP decoder in case the OTF is performed and use BP against its result. 
+   ldpc::bp::BpDecoder * m_po_otf_bp = nullptr;
 
    //! Array that holds indexes from 0 to m_u64_pcm_cols-1 to be sorted.
    std::vector<uint64_t> m_au64_index_array;
@@ -77,7 +99,7 @@ class OBPOTF
     *          passed, the decoder could also use (by input argument or trying to obtaining it) a transference matrix
     *          to simplify the decoding procedure.
     *******************************************************************************************************************/
-   typedef enum 
+   typedef enum ENoiseType
    {
       E_CC     = 0,  //!< Code Capacity (Default mode).
       E_PHEN   = 1,  //!< Phenomenological.
@@ -88,6 +110,32 @@ class OBPOTF
     * PRIVATE CLASS METHOD DECLARATION
     *******************************************************************************************************************/
    private:
+
+   /********************************************************************************************************************
+    * @brief Sub-routine that is called from the object constructor if it is called with a numpy array. It initialized 
+    *        the object members from input parameters and executes necessary pre-processings.
+    * 
+    * @param pcm[in] Parity-check matrix from which to initialize the members.
+    *******************************************************************************************************************/
+   void OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & pcm);
+   
+   /********************************************************************************************************************
+    * @brief Sub-routine that is called from the object constructor if it is called with a scipy_csc object. In this 
+    *        case, the object is converted to a pyarray and the the OBPOTF_init_from_numpy is called with it. 
+    * 
+    * @param pcm[in] Parity-check matrix from which to initialize the members.
+    *******************************************************************************************************************/
+   void OBPOTF_init_from_scipy_csc(py::object const & pcm);
+
+   /********************************************************************************************************************
+    * @brief Sub-routine that is called from the object constructor if this is fed with a stim dem object. In this 
+    *        case, the PCM is extracted from the DEM and a transfer matrix is passed as argument to simplify the 
+    *        decoding process. In case there is no transfer matrix as input, it will try to generate one if possible.
+    * 
+    * @param po_dem[in]          Input DEM object. PCM is extracted from it.
+    * @param po_transfer_mat[in] Input transfer matrix. If it is null, try to generate a new one.
+    *******************************************************************************************************************/
+   void OBPOTF_init_from_dem(py::object const & po_dem, py::object const * const po_transfer_mat);
 
    /********************************************************************************************************************
     * @brief This routine performs the OTF algorithm using the clasical Unified-Find method.
@@ -163,27 +211,13 @@ class OBPOTF
     * @brief Construct a new OBPOTF object from the input values. It calls other sub-routines depending on the python 
     *        object that is passed as a parameter.
     * 
-    * @param pcm[in]       Parity check matrix. It is passed as a py::object for speed and avoid copying the matrix.
-    * @param p[in]         Phisical error to initialize the bp_decoder.
-    * @param code_type[in] Type of the error source.
+    * @param pcm[in]          Parity check matrix. It is passed as a py::object for speed and avoid copying the matrix.
+    * @param p[in]            Phisical error to initialize the bp_decoder.
+    * @param noise_type[in]   Type of the noise source.
+    * @param transfer_mat[in] Transference matrix to try to simplify the decoding process.
     *******************************************************************************************************************/
-   OBPOTF(py::object const & pcm, float const & p, ENoiseType_t const code_type, py::object const * const transfer_mat);
-
-   /********************************************************************************************************************
-    * @brief Sub-routine that is called from the object constructor if it is called with a numpy array. It initialized 
-    *        the object members from input parameters and executes necessary pre-processings.
-    * 
-    * @param pcm[in] Parity-check matrix from which to initialize the members.
-    *******************************************************************************************************************/
-   void OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & pcm);
-   
-   /********************************************************************************************************************
-    * @brief Sub-routine that is called from the object constructor if it is called with a scipy_csc object. In this 
-    *        case, the object is converted to a pyarray and the the OBPOTF_init_from_numpy is called with it. 
-    * 
-    * @param pcm[in] Parity-check matrix from which to initialize the members.
-    *******************************************************************************************************************/
-   void OBPOTF_init_from_scipy_csc(py::object const & pcm);
+   OBPOTF(py::object const & pcm, float const & p, ENoiseType_t const noise_type,
+            py::object const * const transfer_mat);
 
    /********************************************************************************************************************
     * @brief Delete default constructor, to avoid empty objects.
