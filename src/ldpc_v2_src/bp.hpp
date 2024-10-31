@@ -54,7 +54,7 @@ namespace ldpc::bp {
         BpSparse &pcm;
         std::vector<double> channel_probabilities;
         int check_count;
-        int bit_count;
+        unsigned int bit_count; // IEM: I suppose bit_count cant be a negative value...
         int maximum_iterations;
         BpMethod bp_method;
         BpSchedule schedule;
@@ -116,7 +116,7 @@ namespace ldpc::bp {
                 this->random_schedule_seed = -1;
             } else {
                 this->serial_schedule_order.resize(bit_count);
-                for (int i = 0; i < bit_count; i++) {
+                for (unsigned int i = 0; i < bit_count; i++) {
                     this->serial_schedule_order[i] = i;
                 }
                 this->rng_list_shuffle.seed(this->random_schedule_seed);
@@ -137,7 +137,7 @@ namespace ldpc::bp {
 
         void initialise_log_domain_bp() {
             // initialise BP
-            for (int i = 0; i < this->bit_count; i++) {
+            for (unsigned int i = 0; i < this->bit_count; i++) {
                 this->initial_log_prob_ratios[i] = std::log(
                         (1 - this->channel_probabilities[i]) / this->channel_probabilities[i]);
 
@@ -160,7 +160,7 @@ namespace ldpc::bp {
                     rv_decoding = bp_decode_serial(syndrome);
                 } else throw std::runtime_error("Invalid BP schedule");
 
-                for (int i = 0; i < this->bit_count; i++) {
+                for (unsigned int i = 0; i < this->bit_count; i++) {
                     this->decoding[i] = rv_decoding[i] ^ input_vector[i];
                 }
 
@@ -247,7 +247,7 @@ namespace ldpc::bp {
 
 
                 //compute log probability ratios
-                for (int i = 0; i < this->bit_count; i++) {
+                for (unsigned int i = 0; i < this->bit_count; i++) {
                     double temp = initial_log_prob_ratios[i];
                     for (auto &e: this->pcm.iterate_column(i)) {
                         e.bit_to_check_msg = temp;
@@ -278,7 +278,7 @@ namespace ldpc::bp {
 
 
                 //compute bit to check update
-                for (int i = 0; i < bit_count; i++) {
+                for (unsigned int i = 0; i < bit_count; i++) {
                     double temp = 0;
                     for (auto &e: this->pcm.reverse_iterate_column(i)) {
                         e.bit_to_check_msg += temp;
@@ -301,7 +301,7 @@ namespace ldpc::bp {
             std::vector<double> log_prob_ratios_old;
             log_prob_ratios_old.resize(bit_count);
 
-            for (int i = 0; i < bit_count; i++) {
+            for (unsigned int i = 0; i < bit_count; i++) {
                 this->initial_log_prob_ratios[i] = std::log(
                         (1 - this->channel_probabilities[i]) / this->channel_probabilities[i]);
                 this->log_prob_ratios[i] = this->initial_log_prob_ratios[i];
@@ -373,7 +373,7 @@ namespace ldpc::bp {
 
 
                 //compute hard decisions and calculate syndrome
-                for (int i = 0; i < bit_count; i++) {
+                for (unsigned int i = 0; i < bit_count; i++) {
                     if (this->log_prob_ratios[i] <= 0) {
                         this->decoding[i] = 1;
                         for (auto &e: pcm.iterate_column(i)) {
@@ -382,7 +382,7 @@ namespace ldpc::bp {
                     } else this->decoding[i] = 0;
                 }
 
-                int loop_break = false;
+               //  int loop_break = false;
                 CONVERGED = false;
 
                 if (std::equal(candidate_syndrome.begin(), candidate_syndrome.end(), syndrome.begin())) {
@@ -585,7 +585,7 @@ namespace ldpc::bp {
                 // compute the syndrome for the current candidate decoding solution
                 loop_break = false;
                 CONVERGED = true;
-                for (auto i = 0; i < soft_info_syndrome.size(); i++) {
+                for (size_t i = 0; i < soft_info_syndrome.size(); i++) {
                     if (soft_info_syndrome[i] <= 0) {
                         candidate_syndrome[i] = 1;
                     } else {
