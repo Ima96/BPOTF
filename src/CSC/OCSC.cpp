@@ -263,7 +263,7 @@ void OCSC::print_csc(void)
 
 }
 
-std::vector<std::vector<uint8_t>> OCSC::expand_to_mat(void)
+std::vector<std::vector<uint8_t>> OCSC::expand_to_mat(void) const
 {
    std::vector<std::vector<uint8_t>> res_mat(m_u64_m, std::vector<uint8_t>(m_u64_n, 0U));
 
@@ -290,6 +290,20 @@ std::vector<uint8_t> OCSC::expand_to_column_major(void)
          uint64_t row_idx = m_pu64_r_indices[j];
          res_vec[((i-1)*m_u64_m)+row_idx] = 1U;
       }
+   }
+
+   return res_vec;
+}
+
+std::vector<uint8_t> OCSC::expand_to_row_major(void)
+{
+   std::vector<uint8_t> res_vec;
+
+   std::vector<std::vector<uint8_t>> ppu8_exp_mat = this->expand_to_mat();
+
+   for (uint64_t u64_i = 0U; u64_i < m_u64_m; ++u64_i)
+   {
+      res_vec.insert(res_vec.end(), ppu8_exp_mat[u64_i].begin(), ppu8_exp_mat[u64_i].end());
    }
 
    return res_vec;

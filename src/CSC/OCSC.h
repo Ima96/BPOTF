@@ -48,24 +48,26 @@ class OCSC
 
       void print_csc(void);
 
-      inline uint64_t get_col_num(void)
+      inline uint64_t get_col_num(void) const
       {
          return m_u64_n;
       };
 
-      inline uint64_t get_row_num(void)
+      inline uint64_t get_row_num(void) const
       {
          return m_u64_m;
       };
 
-      inline uint64_t get_nnz(void)
+      inline uint64_t get_nnz(void) const
       {
          return m_u64_nnz;
       };
 
-      std::vector<std::vector<uint8_t>> expand_to_mat(void);
+      std::vector<std::vector<uint8_t>> expand_to_mat(void) const;
 
       std::vector<uint8_t> expand_to_column_major(void);
+
+      std::vector<uint8_t> expand_to_row_major(void);
 
       uint64_t get_col_nnz(uint64_t const & u64_col);
 
