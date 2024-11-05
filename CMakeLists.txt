@@ -41,6 +41,7 @@ file(
 )
 
 list(REMOVE_ITEM BPOTF_SRCS "${CMAKE_CURRENT_LIST_DIR}/src/CSC/main_test.cpp")
+list(REMOVE_ITEM BPOTF_SRCS "${CMAKE_CURRENT_LIST_DIR}/src/CSR/main_test.cpp")
 
 pybind11_add_module(${TARGET_NAME} ${BPOTF_SRCS})
 
