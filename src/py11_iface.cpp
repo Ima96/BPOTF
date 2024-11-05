@@ -23,9 +23,9 @@ namespace py = pybind11;
 // Bindings for the BPOTF module
 PYBIND11_MODULE(BPOTF, BPOTF) {
    // Export enumeration typedef for different error sources supported
-   py::enum_<OBPOTF::ENoiseType_t>(BPOTF, "ENoiseType_t")
-      .value("E_GENERIC", OBPOTF::ENoiseType_t::E_CC)
-      .value("E_CLN", OBPOTF::ENoiseType_t::E_CLN)
+   py::enum_<OBPOTF::ENoiseType_t>(BPOTF, "NoiseType")
+      .value("GENERIC", OBPOTF::ENoiseType_t::E_CC)
+      .value("CLN", OBPOTF::ENoiseType_t::E_CLN)
       .export_values();
 
    // Export class and its public methods.
@@ -38,6 +38,16 @@ PYBIND11_MODULE(BPOTF, BPOTF) {
          )
       .def("otf_uf", py::overload_cast<py::array_t<double, C_FMT> const &>(&OBPOTF::otf_uf))
       .def("decode", &OBPOTF::decode)
-      .def("print_object", &OBPOTF::print_object);
+      .def("print_object", &OBPOTF::print_object)
+      .def("get_pcm", &OBPOTF::getPcm)
+      .def("get_phen_pcm", &OBPOTF::getPhenPcm)
+      .def("get_obs", &OBPOTF::getObs)
+      .def("get_priors", &OBPOTF::getPriors)
+      .def("get_cols", &OBPOTF::get_cols)
+      .def("get_rows", &OBPOTF::get_rows)
+      .def("get_obs_cols", &OBPOTF::get_cols_obs)
+      .def("get_obs_rows", &OBPOTF::get_rows_obs)
+      .def("get_phen_pcm_cols", &OBPOTF::get_cols_phen_pcm)
+      .def("get_phen_pcm_rows", &OBPOTF::get_rows_phen_pcm);
 
 }

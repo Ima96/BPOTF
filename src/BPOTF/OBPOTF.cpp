@@ -86,14 +86,14 @@ inline static py::array_t<typename Sequence::value_type> as_pyarray(Sequence &&s
 template<typename T>
 inline static std::span<T> toSpan2D(py::array_t<T, F_FMT> const & passthrough)
 {
-	py::buffer_info passthroughBuf = passthrough.request();
-	if (passthroughBuf.ndim != 2) {
-		throw std::runtime_error("Error. Number of dimensions must be two");
-	}
-	uint64_t length = passthroughBuf.shape[0] * passthroughBuf.shape[1];
-	T* passthroughPtr = static_cast<T*>(passthroughBuf.ptr);
-	std::span<T> passthroughSpan(passthroughPtr, length);
-	return passthroughSpan;
+   py::buffer_info passthroughBuf = passthrough.request();
+   if (passthroughBuf.ndim != 2) {
+      throw std::runtime_error("Error. Number of dimensions must be two");
+   }
+   uint64_t length = passthroughBuf.shape[0] * passthroughBuf.shape[1];
+   T* passthroughPtr = static_cast<T*>(passthroughBuf.ptr);
+   std::span<T> passthroughSpan(passthroughPtr, length);
+   return passthroughSpan;
 }
 
 /***********************************************************************************************************************
@@ -106,14 +106,33 @@ inline static std::span<T> toSpan2D(py::array_t<T, F_FMT> const & passthrough)
 template<typename T>
 inline static std::span<T> toSpan1D(py::array_t<T, C_FMT> const & passthrough)
 {
-	py::buffer_info passthroughBuf = passthrough.request();
-	if (passthroughBuf.ndim != 1) {
-		throw std::runtime_error("Error. Number of dimensions must be 1");
-	}
-	uint64_t length = passthroughBuf.shape[0];
-	T* passthroughPtr = static_cast<T*>(passthroughBuf.ptr);
-	std::span<T> passthroughSpan(passthroughPtr, length);
-	return passthroughSpan;
+   py::buffer_info passthroughBuf = passthrough.request();
+   if (passthroughBuf.ndim != 1) {
+      throw std::runtime_error("Error. Number of dimensions must be 1");
+   }
+   uint64_t length = passthroughBuf.shape[0];
+   T* passthroughPtr = static_cast<T*>(passthroughBuf.ptr);
+   std::span<T> passthroughSpan(passthroughPtr, length);
+   return passthroughSpan;
+}
+
+/***********************************************************************************************************************
+ * @brief Returns vector<T> from py:array_T<T>. Only works with py::array_t with 1 dimension.
+ * 
+ * @tparam T Type
+ * @param passthrough[in] Numpy array to get as vector.
+ * @return std::vector<T> clean and safe reference to contents of Numpy array.
+ **********************************************************************************************************************/
+template<typename T>
+inline static std::vector<T> toVect1D(py::array_t<T, C_FMT> const & passthrough)
+{
+   py::buffer_info passthroughBuf = passthrough.request();
+   if (passthroughBuf.ndim != 1) {
+      throw std::runtime_error("Error. Number of dimensions must be 1");
+   }
+   uint64_t length = passthroughBuf.shape[0];
+   std::vector<T> passthroughVector(passthrough.data(), passthrough.data() + length);
+   return passthroughVector;
 }
 
 inline OCSC * convert_u8_ndarray_to_csc(py::array_t<uint8_t, F_FMT> const & po_ndarr)
@@ -133,6 +152,30 @@ inline OCSC * convert_u8_ndarray_to_csc(py::array_t<uint8_t, F_FMT> const & po_n
 
    return po_csc_ndarr;
 }
+
+// TODO: optimize the multiplication process with CSR etc.
+inline std::vector<uint8_t> mat_vec_mul(OCSC const & mat, std::vector<uint8_t> const & vec)
+{
+   // I am not going to make any checks for the moment to gain speed and I will assume that the 
+   // lengths of the matrix and vector are the correct ones.
+   std::vector<uint8_t> vec_u8_res(mat.get_row_num(), 0U);
+   std::vector<std::vector<uint8_t>> exp_mat = mat.expand_to_mat();
+   uint64_t u64_num_rows = exp_mat.size();
+   uint64_t u64_num_cols = exp_mat[0].size();
+
+   for (uint64_t u64_i = 0U; u64_i < u64_num_rows; ++u64_i)
+   {
+      uint64_t u64_sum = 0U;
+      for (uint64_t u64_j = 0U; u64_j < u64_num_cols; ++u64_j)
+      {
+         u64_sum += (exp_mat[u64_i][u64_j] * vec[u64_j]);
+      }
+      vec_u8_res[u64_i] = u64_sum % 2;
+   }
+
+   return vec_u8_res;
+}
+
 /***********************************************************************************************************************
  * CLASS METHODS
  **********************************************************************************************************************/
@@ -289,6 +332,8 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    else
    {
       // TODO: Implement a function to try to get the transfer matrix.
+      // For the moment, an exception will be thrown to avoid null pointer access.
+      throw std::runtime_error("A transference matrix must be provided!");
    }
 
    // Maybe add an optional parameter to choose 'allow_undecomposed_hyperedges'?
@@ -302,7 +347,7 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    m_ps_dem_data->po_obs_csc_mat =
       convert_u8_ndarray_to_csc(CONV_2_U8_NDARR(o_py_dem_matrices.attr("observables_matrix")));
 
-   m_ps_dem_data->af64_priors = toSpan1D<double>(o_py_dem_matrices.attr("priors").attr("astype")("float64"));
+   m_ps_dem_data->af64_priors = toVect1D<double>(o_py_dem_matrices.attr("priors").attr("astype")("float64"));
 
    // Store pcm row and col values
    m_u64_pcm_rows = m_po_csc_mat->get_row_num();
@@ -316,7 +361,6 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    uint64_t u64_obs_csc_rows = m_ps_dem_data->po_obs_csc_mat->get_row_num();
    std::vector<uint8_t> pu8_expanded_cm_pcm = m_po_csc_mat->expand_to_column_major();
    std::vector<uint8_t> pu8_expanded_cm_obs = m_ps_dem_data->po_obs_csc_mat->expand_to_column_major();
-   uint64_t u64_phen_row_num = 0U;
    std::vector<uint8_t> pu8_phen_pcm_cm_mat;
    std::vector<uint8_t> pu8_phen_obs_cm_mat;
 
@@ -335,15 +379,15 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
          uint8_t const * const pu8_col_ini_obs = pu8_expanded_cm_obs.data() + (u64_idx*u64_obs_csc_rows);
          uint8_t const * const pu8_col_end_obs = pu8_col_ini_obs + u64_obs_csc_rows;
          pu8_phen_obs_cm_mat.insert(pu8_phen_obs_cm_mat.end(), pu8_col_ini_obs, pu8_col_end_obs);
-         u64_phen_row_num++;         
       }
    }
 
-   m_ps_dem_data->po_phen_pcm_csc = new OCSC(pu8_phen_pcm_cm_mat, u64_phen_row_num);
-   m_ps_dem_data->po_phen_obs_csc = new OCSC(pu8_phen_obs_cm_mat, u64_phen_row_num);
+   m_ps_dem_data->po_phen_pcm_csc = new OCSC(pu8_phen_pcm_cm_mat, m_u64_pcm_rows);
+   m_ps_dem_data->po_phen_obs_csc = new OCSC(pu8_phen_obs_cm_mat, u64_obs_csc_rows);
 
    // Create BpSparse objects
-   m_po_bpsparse_pcm = new ldpc::bp::BpSparse(m_u64_pcm_rows, m_u64_pcm_cols);
+   m_po_bpsparse_pcm = new ldpc::bp::BpSparse(m_u64_pcm_rows, m_u64_pcm_cols, m_po_csc_mat->get_nnz());
+   uint64_t u64_phen_row_num = m_ps_dem_data->po_phen_pcm_csc->get_row_num();
    uint64_t u64_phen_col_num = m_ps_dem_data->po_phen_pcm_csc->get_col_num();
    m_po_bpsparse_phen = new ldpc::bp::BpSparse(u64_phen_row_num,
                                                 u64_phen_col_num);
@@ -375,7 +419,7 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    // Create BpDecoder to use against the pcm
    m_po_pcm_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_pcm,
                                                 channel_errors,
-                                                m_u64_pcm_cols,
+                                                30,//m_u64_pcm_cols,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
                                                 1.0, 1,
@@ -385,7 +429,7 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    // Create BpDecoder to use against the phenomenological pcm.
    m_po_phen_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen,
                                                 std::vector<double>(u64_phen_col_num, 0),
-                                                u64_phen_col_num,
+                                                100,//u64_phen_col_num,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
                                                 1.0, 1,
@@ -395,7 +439,7 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    // Create BpDecoder to use against the pcm after OTF.
    m_po_otf_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen,
                                                 std::vector<double>(u64_phen_col_num, 0),
-                                                u64_phen_col_num,
+                                                100,//u64_phen_col_num,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
                                                 1.0, 1,
@@ -519,9 +563,41 @@ py::array_t<uint8_t> OBPOTF::generic_decode(py::array_t<uint8_t, C_FMT> const & 
 // TODO: implement cln decoding.
 py::array_t<uint8_t> OBPOTF::cln_decode(py::array_t<uint8_t, C_FMT> const & syndrome)
 {
-   std::vector<uint8_t> u8_recovered_err(m_u64_pcm_cols, 0);
+   // First BP stage
+   std::vector<uint8_t> u8_syndrome(syndrome.data(), syndrome.data() + syndrome.size());
+   std::vector<uint8_t> u8_recovered_err = m_po_pcm_bp->decode(u8_syndrome);
+   std::vector<uint8_t> vec_u8_res;
 
-   return as_pyarray(std::move(u8_recovered_err));
+   if (false == m_po_pcm_bp->converge)
+   {
+      // Second BP stage in case it does not converge.
+      std::vector<double> vec_f_llrs = m_po_pcm_bp->log_prob_ratios;
+      std::vector<double> vec_f_mapped_probs = this->propagate(vec_f_llrs);
+      m_po_phen_bp->channel_probabilities = vec_f_mapped_probs;
+      u8_recovered_err = m_po_phen_bp->decode(u8_syndrome);
+      
+      if (false == m_po_phen_bp->converge)
+      {
+         // Third stage with OTF
+         vec_f_llrs = m_po_phen_bp->log_prob_ratios;
+         std::vector<uint64_t> columns_chosen = this->otf_uf(vec_f_llrs);
+
+         std::vector<double> updated_probs(m_u64_pcm_cols, 0.0);
+         uint64_t u64_col_chosen_sz = columns_chosen.size();
+         for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
+            updated_probs[columns_chosen[u64_idx]] = m_p;
+
+         m_po_otf_bp->channel_probabilities = updated_probs;
+         u8_recovered_err = m_po_otf_bp->decode(u8_syndrome);
+      }
+      vec_u8_res = mat_vec_mul(*(m_ps_dem_data->po_phen_obs_csc), u8_recovered_err);
+   }
+   else
+   {
+      vec_u8_res = mat_vec_mul(*(m_ps_dem_data->po_obs_csc_mat), u8_recovered_err);
+   }
+
+   return as_pyarray(std::move(vec_u8_res));
 }
 
 std::vector<uint64_t> OBPOTF::sort_indexes(py::array_t<double> const & llrs) 
@@ -753,6 +829,65 @@ py::array_t<uint64_t> OBPOTF::otf_uf(py::array_t<double, C_FMT> const & llrs)
    }
 
    return as_pyarray(std::move(columns_chosen));
+}
+
+std::vector<double> OBPOTF::propagate(std::vector<double> const & vec_f_llrs)
+{
+   std::vector<double> vec_f_probs;
+   vec_f_probs.resize(vec_f_llrs.size());
+   uint64_t u64_probs_len = vec_f_probs.size();
+   // To get actual probabilities from the log_prob_ratios
+   for (uint64_t u64_idx = 0U; u64_idx < u64_probs_len; ++u64_idx)
+   {
+      vec_f_probs[u64_idx] = 1.0 / (1.0 + std::exp(vec_f_llrs[u64_idx]));
+      if (vec_f_probs[u64_idx] > (1.0 - 1e-14))
+      {
+         vec_f_probs[u64_idx] = 1.0 - 1e-14;
+      }
+      else if (vec_f_probs[u64_idx] < 1e-14)
+      {
+         vec_f_probs[u64_idx] = 1e-14;
+      }
+   }
+
+   std::vector<double> vec_f_mapped_probs;
+   uint64_t u64_res_len = m_ps_dem_data->po_phen_pcm_csc->get_col_num();
+   vec_f_mapped_probs.resize(u64_res_len);
+
+   for (uint64_t u64_col_idx = 0U; u64_col_idx < u64_res_len; ++u64_col_idx)
+   {
+      double f_prod_sum = 1.0;
+      std::span<uint64_t> sp_u64_curr_col = m_ps_dem_data->po_transfer_csc_mat->get_col_row_idxs_fast(u64_col_idx);
+      uint64_t u64_curr_col_len = sp_u64_curr_col.size();
+      for (uint64_t u64_idx = 0U; u64_idx < u64_curr_col_len; ++u64_idx)
+      {
+         f_prod_sum *= (1.0 - (2.0 * vec_f_probs[sp_u64_curr_col[u64_idx]]));
+      }
+
+      vec_f_mapped_probs[u64_col_idx] = 0.5 * (1.0 - f_prod_sum);
+   }
+
+   return vec_f_mapped_probs;
+}
+
+py::array_t<uint8_t> OBPOTF::getPcm(void)
+{
+   return as_pyarray(std::move(m_po_csc_mat->expand_to_row_major()));
+}
+
+py::array_t<uint8_t> OBPOTF::getPhenPcm(void)
+{
+   return as_pyarray(std::move(m_ps_dem_data->po_phen_pcm_csc->expand_to_row_major()));
+}
+
+py::array_t<uint8_t> OBPOTF::getObs(void)
+{
+   return as_pyarray(std::move(m_ps_dem_data->po_obs_csc_mat->expand_to_row_major()));
+}
+
+py::array_t<double> OBPOTF::getPriors(void)
+{
+   return as_pyarray(std::move(m_ps_dem_data->af64_priors));
 }
 
 OBPOTF::~OBPOTF(void)

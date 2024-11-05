@@ -65,7 +65,7 @@ class OBPOTF
       OCSC * po_phen_obs_csc = nullptr;
 
      //!< Array of prior probabilities
-     std::span<double> af64_priors; 
+     std::vector<double> af64_priors; 
 
    } SDemData_t;
 
@@ -182,6 +182,8 @@ class OBPOTF
     *******************************************************************************************************************/
    std::vector<uint64_t *> sort_indexes_nc(std::span<double> const & llrs);
 
+   std::vector<double> propagate(std::vector<double> const & vec_f_probs);
+
    /********************************************************************************************************************
     * @brief This routine executes a generic decode procedure, which is done for surface-codes. It is registered as a 
     *        callback in the member variable m_pf_decoding_func when the object is created if the enumeration type is
@@ -252,6 +254,18 @@ class OBPOTF
     * @brief Prints the object's member. Developing purposes and testing.
     *******************************************************************************************************************/
    void print_object(void);
+
+   py::array_t<uint8_t> getPcm(void);
+   py::array_t<uint8_t> getPhenPcm(void);
+   py::array_t<uint8_t> getObs(void);
+   py::array_t<double> getPriors(void);
+
+   inline uint64_t get_cols(void) { return m_u64_pcm_cols; }
+   inline uint64_t get_rows(void) { return m_u64_pcm_rows; }
+   inline uint64_t get_cols_obs(void) { return m_ps_dem_data->po_obs_csc_mat->get_col_num(); }
+   inline uint64_t get_rows_obs(void) { return m_ps_dem_data->po_obs_csc_mat->get_row_num(); }
+   inline uint64_t get_cols_phen_pcm(void) { return m_ps_dem_data->po_phen_pcm_csc->get_col_num(); }
+   inline uint64_t get_rows_phen_pcm(void) { return m_ps_dem_data->po_phen_pcm_csc->get_row_num(); }
 };
 
 #endif // OBPOTF_H_

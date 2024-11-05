@@ -220,13 +220,15 @@ class UFCLN:
         llrs = self._bpd.log_prob_ratios
         ps_h = 1 / (1 + np.exp(llrs))
         eps = 1e-14
+        ps_h[ps_h > 1 - eps] = 1 - eps
+        ps_h[ps_h < eps] = eps
+        # print(ps_h)
+        # print(self.transf_M_red)
         
         # Este cambio, en vez de hacerlo así, vamos a considerar una nueva manera de hacer 
         # ps_e = self.transf_M @ ps_h      
-        ps_e = self.propagation(ps_h)  
-        ps_e[ps_e > 1 - eps] = 1 - eps
-        ps_e[ps_e < eps] = eps
-        
+        ps_e = self.propagation(ps_h)
+        #return ps_e, 0
         
         # updated_probs[columns_chosen] = self.priors_phen[columns_chosen].flatten()
         self._bpd2.update_channel_probs(ps_e)
