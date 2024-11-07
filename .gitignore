@@ -7,3 +7,5 @@ CMakeFiles/
 CMakeCache.txt
 *.egg-info/
 *.so
+*.txt
+*_test
