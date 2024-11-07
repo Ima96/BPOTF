@@ -23,15 +23,16 @@ int main(void)
                                        { 5, 8, 0, 0, 0 },
                                        { 0, 0, 3, 0, 0 },
                                        { 0, 6, 0, 0, 1 },
-                                       { 0, 0, 0, 7, 0 }
+                                       { 0, 0, 0, 7, 0 },
+                                       { 4, 0, 1, 0, 0 }
                                     };
 
    vector<uint8_t> u8_cm_mat_vec = {
-                                       0, 5, 0, 0, 0,
-                                       0, 8, 0, 6, 0,
-                                       0, 0, 3, 0, 0,
-                                       0, 0, 0, 0, 7,
-                                       1, 0, 0, 1, 0
+                                       0, 5, 0, 0, 0, 4,
+                                       0, 8, 0, 6, 0, 0,
+                                       0, 0, 3, 0, 0, 1,
+                                       0, 0, 0, 0, 7, 0,
+                                       1, 0, 0, 1, 0, 0
                                     };
 
    vector<vector<uint8_t>> u8_expanded_mat;
@@ -70,10 +71,25 @@ int main(void)
    cout << "Constructed from Column-Major:\n";
    o_csr_cm_mat.print_csr();
 
-   std::span<uint8_t> sp_u8_cm_mat_vec(u8_cm_mat_vec);
-   OCSR o_sp_csr_cm_mat(sp_u8_cm_mat_vec, 5);
+   std::span<uint8_t> sp_u8_cm_mat_vec(u8_cm_mat_vec.data(), u8_cm_mat_vec.size());
+   OCSR o_sp_csr_cm_mat(sp_u8_cm_mat_vec, 6);
    cout << "Constructed from Column-Major SPAN:\n";
    o_sp_csr_cm_mat.print_csr();
+   std::vector<uint8_t> vec_u8_exp_rm = o_sp_csr_cm_mat.expand_to_row_major();
+   std::cout << "Expanded to row major: ";
+   for (int i = 0; i < vec_u8_exp_rm.size(); ++i)
+   {
+      std::cout << int(vec_u8_exp_rm[i]) << " ";
+   }
+   std::cout << std::endl;
+   
+   std::vector<uint8_t> vec_u8_exp_cm = o_sp_csr_cm_mat.expand_to_column_major();
+   std::cout << "Expanded to col major: ";
+   for (int i = 0; i < vec_u8_exp_cm.size(); ++i)
+   {
+      std::cout << int(vec_u8_exp_cm[i]) << " ";
+   }
+   std::cout << std::endl;
 
    OCSR o_csr_mat_cp(o_csr_mat);
    cout << "Constructed from Copy constructor:\n";
