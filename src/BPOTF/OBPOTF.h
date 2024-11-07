@@ -25,6 +25,7 @@
 
 // Custom includes
 #include "CSC/OCSC.h"
+#include "CSR/OCSR.h"
 #include "../ldpc_v2_src/bp.hpp"
 
 namespace py = pybind11;
@@ -53,16 +54,16 @@ class OBPOTF
    typedef struct SDemData
    {
       //! Transfer matrix in case a DEM is provided.
-      OCSC * po_transfer_csc_mat = nullptr;
+      OCSR * po_transfer_csr_mat = nullptr;
 
       //!< Observables CSC matrix in case DEM is provided.
-      OCSC * po_obs_csc_mat = nullptr;
+      OCSR * po_obs_csr_mat = nullptr;
 
       //!< Phenomenological CSC matrix of the pcm.
       OCSC * po_phen_pcm_csc = nullptr;
 
       //!< Phenomenological CSC matrix of the observables.
-      OCSC * po_phen_obs_csc = nullptr;
+      OCSR * po_phen_obs_csr = nullptr;
 
      //!< Array of prior probabilities
      std::vector<double> af64_priors; 

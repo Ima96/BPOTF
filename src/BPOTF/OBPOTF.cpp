@@ -153,24 +153,42 @@ inline OCSC * convert_u8_ndarray_to_csc(py::array_t<uint8_t, F_FMT> const & po_n
    return po_csc_ndarr;
 }
 
-// TODO: optimize the multiplication process with CSR etc.
-inline std::vector<uint8_t> mat_vec_mul(OCSC const & mat, std::vector<uint8_t> const & vec)
+inline OCSR * convert_u8_ndarray_to_csr(py::array_t<uint8_t, F_FMT> const & po_ndarr)
+{
+   py::buffer_info py_pcm_bufinfo = po_ndarr.request();
+
+   if (py_pcm_bufinfo.ndim != 2)
+   {
+      throw std::runtime_error("[ERROR] The pcm must be of ndim = 2!");
+   }
+
+   uint64_t u64_ndarr_rows = po_ndarr.shape(0L);
+
+   std::span<uint8_t> const au8_ndarr_sp = toSpan2D(po_ndarr);
+
+   OCSR * po_csr_ndarr = new OCSR(au8_ndarr_sp, u64_ndarr_rows);
+
+   return po_csr_ndarr;
+}
+
+inline std::vector<uint8_t> mat_vec_mul(OCSR const & csr_mat, std::vector<uint8_t> const & vec)
 {
    // I am not going to make any checks for the moment to gain speed and I will assume that the 
    // lengths of the matrix and vector are the correct ones.
-   std::vector<uint8_t> vec_u8_res(mat.get_row_num(), 0U);
-   std::vector<std::vector<uint8_t>> exp_mat = mat.expand_to_mat();
-   uint64_t u64_num_rows = exp_mat.size();
-   uint64_t u64_num_cols = exp_mat[0].size();
+   std::vector<uint8_t> vec_u8_res(csr_mat.get_row_num(), 0U);
 
-   for (uint64_t u64_i = 0U; u64_i < u64_num_rows; ++u64_i)
+   uint64_t u64_num_rows = csr_mat.get_row_num();
+
+   for (uint64_t u64_row_idx = 0U; u64_row_idx < u64_num_rows; ++u64_row_idx)
    {
+      std::span<uint64_t> sp_u8_col_idxs = csr_mat.get_row_col_idxs_fast(u64_row_idx);
+      uint64_t u64_row_nnz = sp_u8_col_idxs.size();
       uint64_t u64_sum = 0U;
-      for (uint64_t u64_j = 0U; u64_j < u64_num_cols; ++u64_j)
+      for (uint64_t u64_i = 0U; u64_i < u64_row_nnz; ++u64_i)
       {
-         u64_sum += (exp_mat[u64_i][u64_j] * vec[u64_j]);
+         u64_sum += vec[sp_u8_col_idxs[u64_i]];
       }
-      vec_u8_res[u64_i] = u64_sum % 2;
+      vec_u8_res[u64_row_idx] = u64_sum % 2;
    }
 
    return vec_u8_res;
@@ -306,6 +324,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm)
    }
 }
 
+// TODO: Add checks to verify that every sizes and all are correct!
 void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * const po_transfer_mat)
 {
    m_ps_dem_data = new SDemData_t;
@@ -314,14 +333,14 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    {
       if (true == py::isinstance<py::array_t<uint8_t>>(*po_transfer_mat))
       {
-         m_ps_dem_data->po_transfer_csc_mat = convert_u8_ndarray_to_csc(*po_transfer_mat);
+         m_ps_dem_data->po_transfer_csr_mat = convert_u8_ndarray_to_csr(*po_transfer_mat);
       }
       else if (true == py::isinstance(*po_transfer_mat, vf_scipy_csc_type))
       {
          // Convert scipy.sparse.csc_matrix to ndarray of uint8_t
          py::object o_dense_transfer_mat = (*po_transfer_mat).attr("toarray")();
          py::array_t<uint8_t, F_FMT> au8_transfer_mat_pyarr = o_dense_transfer_mat.attr("astype")("uint8");
-         m_ps_dem_data->po_transfer_csc_mat = convert_u8_ndarray_to_csc(au8_transfer_mat_pyarr);
+         m_ps_dem_data->po_transfer_csr_mat = convert_u8_ndarray_to_csr(au8_transfer_mat_pyarr);
       }
       else
       {
@@ -344,8 +363,8 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    m_po_csc_mat = 
       convert_u8_ndarray_to_csc(CONV_2_U8_NDARR(o_py_dem_matrices.attr("check_matrix")));
 
-   m_ps_dem_data->po_obs_csc_mat =
-      convert_u8_ndarray_to_csc(CONV_2_U8_NDARR(o_py_dem_matrices.attr("observables_matrix")));
+   m_ps_dem_data->po_obs_csr_mat =
+      convert_u8_ndarray_to_csr(CONV_2_U8_NDARR(o_py_dem_matrices.attr("observables_matrix")));
 
    m_ps_dem_data->af64_priors = toVect1D<double>(o_py_dem_matrices.attr("priors").attr("astype")("float64"));
 
@@ -358,9 +377,9 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    std::iota(m_au64_index_array.begin(), m_au64_index_array.end(), 0UL);
 
    // Create objects for the phenomenological matrices and populate them
-   uint64_t u64_obs_csc_rows = m_ps_dem_data->po_obs_csc_mat->get_row_num();
+   uint64_t u64_obs_csr_rows = m_ps_dem_data->po_obs_csr_mat->get_row_num();
    std::vector<uint8_t> pu8_expanded_cm_pcm = m_po_csc_mat->expand_to_column_major();
-   std::vector<uint8_t> pu8_expanded_cm_obs = m_ps_dem_data->po_obs_csc_mat->expand_to_column_major();
+   std::vector<uint8_t> pu8_expanded_cm_obs = m_ps_dem_data->po_obs_csr_mat->expand_to_column_major();
    std::vector<uint8_t> pu8_phen_pcm_cm_mat;
    std::vector<uint8_t> pu8_phen_obs_cm_mat;
 
@@ -376,14 +395,14 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
          uint8_t const * const pu8_col_end = pu8_col_ini + m_u64_pcm_rows;
          pu8_phen_pcm_cm_mat.insert(pu8_phen_pcm_cm_mat.end(), pu8_col_ini, pu8_col_end);
          
-         uint8_t const * const pu8_col_ini_obs = pu8_expanded_cm_obs.data() + (u64_idx*u64_obs_csc_rows);
-         uint8_t const * const pu8_col_end_obs = pu8_col_ini_obs + u64_obs_csc_rows;
+         uint8_t const * const pu8_col_ini_obs = pu8_expanded_cm_obs.data() + (u64_idx*u64_obs_csr_rows);
+         uint8_t const * const pu8_col_end_obs = pu8_col_ini_obs + u64_obs_csr_rows;
          pu8_phen_obs_cm_mat.insert(pu8_phen_obs_cm_mat.end(), pu8_col_ini_obs, pu8_col_end_obs);
       }
    }
 
    m_ps_dem_data->po_phen_pcm_csc = new OCSC(pu8_phen_pcm_cm_mat, m_u64_pcm_rows);
-   m_ps_dem_data->po_phen_obs_csc = new OCSC(pu8_phen_obs_cm_mat, u64_obs_csc_rows);
+   m_ps_dem_data->po_phen_obs_csr = new OCSR(pu8_phen_obs_cm_mat, u64_obs_csr_rows);
 
    // Create BpSparse objects
    m_po_bpsparse_pcm = new ldpc::bp::BpSparse(m_u64_pcm_rows, m_u64_pcm_cols, m_po_csc_mat->get_nnz());
@@ -490,8 +509,8 @@ void OBPOTF::print_object(void)
       std::cout << std::endl;
       
       std::cout << "Observables CSC object:\n";
-      m_ps_dem_data->po_obs_csc_mat->print_csc();
-      ppu8_mat = m_ps_dem_data->po_obs_csc_mat->expand_to_mat();
+      m_ps_dem_data->po_obs_csr_mat->print_csr();
+      ppu8_mat = m_ps_dem_data->po_obs_csr_mat->expand_to_mat();
       u64_row_sz = ppu8_mat.size();
       u64_col_sz = (u64_row_sz > 0) ? ppu8_mat[0].size() : 0UL;
       for (uint64_t u64_row_idx = 0U; u64_row_idx < u64_row_sz; ++u64_row_idx)
@@ -503,8 +522,8 @@ void OBPOTF::print_object(void)
       std::cout << std::endl;
 
       std::cout << "Phenomenological Observables CSC object:\n";
-      m_ps_dem_data->po_phen_obs_csc->print_csc();
-      ppu8_mat = m_ps_dem_data->po_phen_obs_csc->expand_to_mat();
+      m_ps_dem_data->po_phen_obs_csr->print_csr();
+      ppu8_mat = m_ps_dem_data->po_phen_obs_csr->expand_to_mat();
       u64_row_sz = ppu8_mat.size();
       u64_col_sz = (u64_row_sz > 0) ? ppu8_mat[0].size() : 0UL;
       for (uint64_t u64_row_idx = 0U; u64_row_idx < u64_row_sz; ++u64_row_idx)
@@ -851,20 +870,20 @@ std::vector<double> OBPOTF::propagate(std::vector<double> const & vec_f_llrs)
    }
 
    std::vector<double> vec_f_mapped_probs;
-   uint64_t u64_res_len = m_ps_dem_data->po_phen_pcm_csc->get_col_num();
+   uint64_t u64_res_len = m_ps_dem_data->po_transfer_csr_mat->get_row_num();
    vec_f_mapped_probs.resize(u64_res_len);
 
-   for (uint64_t u64_col_idx = 0U; u64_col_idx < u64_res_len; ++u64_col_idx)
+   for (uint64_t u64_row_idx = 0U; u64_row_idx < u64_res_len; ++u64_row_idx)
    {
       double f_prod_sum = 1.0;
-      std::span<uint64_t> sp_u64_curr_col = m_ps_dem_data->po_transfer_csc_mat->get_col_row_idxs_fast(u64_col_idx);
-      uint64_t u64_curr_col_len = sp_u64_curr_col.size();
-      for (uint64_t u64_idx = 0U; u64_idx < u64_curr_col_len; ++u64_idx)
+      std::span<uint64_t> sp_u64_curr_row = m_ps_dem_data->po_transfer_csr_mat->get_row_col_idxs_fast(u64_row_idx);
+      uint64_t u64_curr_row_len = sp_u64_curr_row.size();
+      for (uint64_t u64_idx = 0U; u64_idx < u64_curr_row_len; ++u64_idx)
       {
-         f_prod_sum *= (1.0 - (2.0 * vec_f_probs[sp_u64_curr_col[u64_idx]]));
+         f_prod_sum *= (1.0 - (2.0 * vec_f_probs[sp_u64_curr_row[u64_idx]]));
       }
 
-      vec_f_mapped_probs[u64_col_idx] = 0.5 * (1.0 - f_prod_sum);
+      vec_f_mapped_probs[u64_row_idx] = 0.5 * (1.0 - f_prod_sum);
    }
 
    return vec_f_mapped_probs;
@@ -897,17 +916,17 @@ OBPOTF::~OBPOTF(void)
 
    if (nullptr != m_ps_dem_data)
    {
-      if (nullptr != m_ps_dem_data->po_transfer_csc_mat)
-         delete m_ps_dem_data->po_transfer_csc_mat;
+      if (nullptr != m_ps_dem_data->po_transfer_csr_mat)
+         delete m_ps_dem_data->po_transfer_csr_mat;
       
-      if (nullptr != m_ps_dem_data->po_obs_csc_mat)
-         delete m_ps_dem_data->po_obs_csc_mat;
+      if (nullptr != m_ps_dem_data->po_obs_csr_mat)
+         delete m_ps_dem_data->po_obs_csr_mat;
       
       if (nullptr != m_ps_dem_data->po_phen_pcm_csc)
          delete m_ps_dem_data->po_phen_pcm_csc;
       
-      if (nullptr != m_ps_dem_data->po_phen_obs_csc)
-         delete m_ps_dem_data->po_phen_obs_csc;
+      if (nullptr != m_ps_dem_data->po_phen_obs_csr)
+         delete m_ps_dem_data->po_phen_obs_csr;
       
       delete m_ps_dem_data;
    }
