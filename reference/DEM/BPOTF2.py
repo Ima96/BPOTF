@@ -3,7 +3,6 @@ import numpy as np
 import copy
 import time
 import stim
-from beliefmatching import detector_error_model_to_check_matrices
 from scipy.io import savemat
 import scipy.io as sio
 from itertools import combinations
