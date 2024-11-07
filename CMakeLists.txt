@@ -16,7 +16,7 @@ set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ version selection")  # or 11, 14, 17
 set(CMAKE_CXX_STANDARD_REQUIRED ON)  # ensure standard is supported
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
    message(INFO " No optimization!")
-   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -Wall -Wstack-protector -flto=auto")
+   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -Wall -Wstack-protector -flto=auto -DDEBUG_OBPOTF")
 else()
    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -Wstack-protector -flto=auto")
 endif()

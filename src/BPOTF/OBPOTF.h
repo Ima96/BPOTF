@@ -256,17 +256,23 @@ class OBPOTF
     *******************************************************************************************************************/
    void print_object(void);
 
+#if defined(DEBUG_OBPOTF)
    py::array_t<uint8_t> getPcm(void);
    py::array_t<uint8_t> getPhenPcm(void);
    py::array_t<uint8_t> getObs(void);
+   py::array_t<uint8_t> getTransfMat(void);
    py::array_t<double> getPriors(void);
 
    inline uint64_t get_cols(void) { return m_u64_pcm_cols; }
    inline uint64_t get_rows(void) { return m_u64_pcm_rows; }
-   inline uint64_t get_cols_obs(void) { return m_ps_dem_data->po_obs_csc_mat->get_col_num(); }
-   inline uint64_t get_rows_obs(void) { return m_ps_dem_data->po_obs_csc_mat->get_row_num(); }
+   inline uint64_t get_cols_obs(void) { return m_ps_dem_data->po_obs_csr_mat->get_col_num(); }
+   inline uint64_t get_rows_obs(void) { return m_ps_dem_data->po_obs_csr_mat->get_row_num(); }
    inline uint64_t get_cols_phen_pcm(void) { return m_ps_dem_data->po_phen_pcm_csc->get_col_num(); }
    inline uint64_t get_rows_phen_pcm(void) { return m_ps_dem_data->po_phen_pcm_csc->get_row_num(); }
+   inline uint64_t get_cols_transf(void) { return m_ps_dem_data->po_transfer_csr_mat->get_col_num(); }
+   inline uint64_t get_rows_transf(void) { return m_ps_dem_data->po_transfer_csr_mat->get_row_num(); }
+#endif
+
 };
 
 #endif // OBPOTF_H_

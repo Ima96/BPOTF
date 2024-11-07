@@ -80,11 +80,12 @@ inline static py::array_t<typename Sequence::value_type> as_pyarray(Sequence &&s
  * @brief Returns span<T> from py:array_T<T>. Efficient as zero-copy. Only works with py::array_t with 2 dimensions.
  * 
  * @tparam T Type
+ * @tparam I Array format enumeration.
  * @param passthrough[in] Numpy array to get as span.
  * @return std::span<T> clean and safe reference to contents of Numpy array.
  **********************************************************************************************************************/
-template<typename T>
-inline static std::span<T> toSpan2D(py::array_t<T, F_FMT> const & passthrough)
+template<typename T, int I>
+inline static std::span<T> toSpan2D(py::array_t<T, I> const & passthrough)
 {
    py::buffer_info passthroughBuf = passthrough.request();
    if (passthroughBuf.ndim != 2) {
@@ -889,6 +890,7 @@ std::vector<double> OBPOTF::propagate(std::vector<double> const & vec_f_llrs)
    return vec_f_mapped_probs;
 }
 
+#if defined(DEBUG_OBPOTF)
 py::array_t<uint8_t> OBPOTF::getPcm(void)
 {
    return as_pyarray(std::move(m_po_csc_mat->expand_to_row_major()));
@@ -901,13 +903,19 @@ py::array_t<uint8_t> OBPOTF::getPhenPcm(void)
 
 py::array_t<uint8_t> OBPOTF::getObs(void)
 {
-   return as_pyarray(std::move(m_ps_dem_data->po_obs_csc_mat->expand_to_row_major()));
+   return as_pyarray(std::move(m_ps_dem_data->po_obs_csr_mat->expand_to_row_major()));
+}
+
+py::array_t<uint8_t> OBPOTF::getTransfMat(void)
+{
+   return as_pyarray(std::move(m_ps_dem_data->po_transfer_csr_mat->expand_to_row_major()));
 }
 
 py::array_t<double> OBPOTF::getPriors(void)
 {
    return as_pyarray(std::move(m_ps_dem_data->af64_priors));
 }
+#endif
 
 OBPOTF::~OBPOTF(void)
 {

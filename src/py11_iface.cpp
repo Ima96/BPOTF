@@ -38,16 +38,21 @@ PYBIND11_MODULE(BPOTF, BPOTF) {
          )
       .def("otf_uf", py::overload_cast<py::array_t<double, C_FMT> const &>(&OBPOTF::otf_uf))
       .def("decode", &OBPOTF::decode)
-      .def("print_object", &OBPOTF::print_object)
+#if defined(DEBUG_OBPOTF)
       .def("get_pcm", &OBPOTF::getPcm)
       .def("get_phen_pcm", &OBPOTF::getPhenPcm)
       .def("get_obs", &OBPOTF::getObs)
+      .def("get_transf", &OBPOTF::getTransfMat)
       .def("get_priors", &OBPOTF::getPriors)
       .def("get_cols", &OBPOTF::get_cols)
       .def("get_rows", &OBPOTF::get_rows)
       .def("get_obs_cols", &OBPOTF::get_cols_obs)
       .def("get_obs_rows", &OBPOTF::get_rows_obs)
       .def("get_phen_pcm_cols", &OBPOTF::get_cols_phen_pcm)
-      .def("get_phen_pcm_rows", &OBPOTF::get_rows_phen_pcm);
+      .def("get_phen_pcm_rows", &OBPOTF::get_rows_phen_pcm)
+      .def("get_transf_cols", &OBPOTF::get_cols_transf)
+      .def("get_transf_rows", &OBPOTF::get_rows_transf)
+#endif
+      .def("print_object", &OBPOTF::print_object);
 
 }
