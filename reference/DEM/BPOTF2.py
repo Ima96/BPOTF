@@ -1,5 +1,5 @@
 import numpy as np
-from ldpc import bp_decoder, bposd_decoder
+# from ldpc import bp_decoder, bposd_decoder
 import copy
 import time
 import stim
@@ -7,10 +7,21 @@ from beliefmatching import detector_error_model_to_check_matrices
 from scipy.io import savemat
 import scipy.io as sio
 from itertools import combinations
+from timeit import default_timer as timer
 
-
+from packaging.version import Version
+from ldpc import __version__ as ldpc_version
+ldpc_v2 = Version(ldpc_version) >= Version("2.0.0")
+print("Using LDPC version v{}".format(ldpc_version))
+if ldpc_v2 is True:
+    from ldpc import BpDecoder as bp_decoder
+    from ldpc import BpOsdDecoder as bposd_decoder
+else:
+    from ldpc import bp_decoder
+    from ldpc import bposd_decoder
 # Propagation of information
 
+from beliefmatching import detector_error_model_to_check_matrices
 
 
 
