@@ -74,11 +74,11 @@ class OCSR
 
       std::vector<uint8_t> expand_to_row_major(void);
 
-      uint64_t get_row_nnz(uint64_t const & u64_row);
+      uint64_t get_row_nnz(uint64_t const & u64_row) const;
 
       std::vector<uint64_t> get_row_col_idxs(uint64_t const & u64_row);
 
-      std::span<uint64_t> get_row_col_idxs_fast(uint64_t const & u64_row);
+      std::span<uint64_t> get_row_col_idxs_fast(uint64_t const & u64_row) const;
 
       void add_col_idx(uint64_t const & u64_row_idx, uint64_t const & u64_col_idx);
 

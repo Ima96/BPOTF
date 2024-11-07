@@ -157,16 +157,16 @@ OCSR::OCSR(std::vector<uint8_t> const & pcm, uint64_t const & u64_row_num)
    m_pu64_indptr[0] = 0;
 
    // count number of non-zero elements
-   for (uint64_t j = 0U; j < m_u64_n; j++)
+   for (uint64_t i = 0U; i < m_u64_m; i++)
    {
-      for (uint64_t i = 0U; i < m_u64_m; i++)
+      for (uint64_t j = 0U; j < m_u64_n; j++)
       {
-         if (pcm[(i*m_u64_m)+j] != 0U)
+         if (pcm[(j*m_u64_m)+i] != 0U)
          {
             m_u64_nnz++;
          }
       }
-      m_pu64_indptr[j+1] = m_u64_nnz;
+      m_pu64_indptr[i+1] = m_u64_nnz;
    }
 
    // allocate memory
@@ -174,13 +174,13 @@ OCSR::OCSR(std::vector<uint8_t> const & pcm, uint64_t const & u64_row_num)
 
    // fill array
    uint64_t u64_cont = 0U;
-   for (uint64_t j = 0U; j < m_u64_n; j++)
+   for (uint64_t i = 0U; i < m_u64_m; ++i)
    {
-      for (uint64_t i = 0U; i < m_u64_m; i++)
+      for (uint64_t j = 0U; j < m_u64_n; ++j)
       {
-         if (pcm[(i*m_u64_m)+j] != 0U)
+         if (pcm[(j*m_u64_m)+i] != 0U)
          {
-            m_pu64_c_indices[u64_cont] = i;
+            m_pu64_c_indices[u64_cont] = j;
             u64_cont++;
          }
       }
@@ -202,16 +202,16 @@ OCSR::OCSR(std::span<uint8_t> const & pcm, uint64_t const & u64_row_num)
    m_pu64_indptr[0] = 0;
 
    // count number of non-zero elements
-   for (uint64_t j = 0U; j < m_u64_n; j++)
+   for (uint64_t i = 0U; i < m_u64_m; i++)
    {
-      for (uint64_t i = 0U; i < m_u64_m; i++)
+      for (uint64_t j = 0U; j < m_u64_n; j++)
       {
-         if (pcm[(i*m_u64_m)+j] != 0U)
+         if (pcm[(j*m_u64_m)+i] != 0U)
          {
             m_u64_nnz++;
          }
       }
-      m_pu64_indptr[j+1] = m_u64_nnz;
+      m_pu64_indptr[i+1] = m_u64_nnz;
    }
 
    // allocate memory
@@ -219,13 +219,13 @@ OCSR::OCSR(std::span<uint8_t> const & pcm, uint64_t const & u64_row_num)
 
    // fill array
    uint64_t u64_cont = 0U;
-   for (uint64_t j = 0U; j < m_u64_n; j++)
+   for (uint64_t i = 0U; i < m_u64_m; ++i)
    {
-      for (uint64_t i = 0U; i < m_u64_m; i++)
+      for (uint64_t j = 0U; j < m_u64_n; ++j)
       {
-         if (pcm[(i*m_u64_m)+j] != 0U)
+         if (pcm[(j*m_u64_m)+i] != 0U)
          {
-            m_pu64_c_indices[u64_cont] = i;
+            m_pu64_c_indices[u64_cont] = j;
             u64_cont++;
          }
       }
@@ -289,7 +289,7 @@ std::vector<uint8_t> OCSR::expand_to_row_major(void)
       for (uint64_t j = m_pu64_indptr[i-1]; j < m_pu64_indptr[i]; j++)
       {
          uint64_t col_idx = m_pu64_c_indices[j];
-         res_vec[((i-1)*m_u64_m)+col_idx] = 1U;
+         res_vec[((i-1)*m_u64_n)+col_idx] = 1U;
       }
    }
 
@@ -305,17 +305,17 @@ std::vector<uint8_t> OCSR::expand_to_column_major(void)
    for (uint64_t u64_i = 0U; u64_i < m_u64_m; ++u64_i)
    {
       std::vector<uint64_t> vec_u8_col_idxs = this->get_row_col_idxs(u64_i);
-      uint64_t u64_row_nnz = this->get_row_nnz(u64_i);
+      uint64_t u64_row_nnz = vec_u8_col_idxs.size();
       for (uint64_t u64_idx = 0U; u64_idx < u64_row_nnz; ++u64_idx)
       {
-         res_vec[(vec_u8_col_idxs[u64_idx]*m_u64_n)+u64_i] = 1U;
+         res_vec[(vec_u8_col_idxs[u64_idx]*m_u64_m)+u64_i] = 1U;
       }
    }
 
    return res_vec;
 }
 
-uint64_t OCSR::get_row_nnz(uint64_t const & u64_row)
+uint64_t OCSR::get_row_nnz(uint64_t const & u64_row) const
 {
    if (u64_row > m_u64_m)
    {
@@ -341,7 +341,7 @@ std::vector<uint64_t> OCSR::get_row_col_idxs(uint64_t const & u64_row)
    return u64_res_vec;
 }
 
-std::span<uint64_t> OCSR::get_row_col_idxs_fast(uint64_t const & u64_row)
+std::span<uint64_t> OCSR::get_row_col_idxs_fast(uint64_t const & u64_row) const
 {
    std::span<uint64_t> u64_res_sp;
    uint64_t u64_row_nnz = this->get_row_nnz(u64_row);
