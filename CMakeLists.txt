@@ -40,6 +40,12 @@ endif()
 
 add_compile_definitions(BPOTF_VERSION="${cpp_full_version}")
 
+option(DEBUG_TIMING  "Enable timing prints." OFF)
+
+if(DEBUG_TIMING)
+   add_definitions(-DTIMING_OBPOTF)
+endif()
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/module)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 set(BUILD_OBJECTS_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/.obj)

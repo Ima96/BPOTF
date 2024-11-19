@@ -16,6 +16,12 @@
 #include <span>
 #include <iostream>
 
+#if defined(TIMING_OBPOTF)
+// Timing tests
+#include <chrono>
+#include <iomanip>
+#endif
+
 // Windows build includes
 #if defined(_MSC_VER)
 #include <BaseTsd.h>
@@ -33,6 +39,21 @@ using namespace py::literals;
  * DEFINES
  **********************************************************************************************************************/
 #define CONV_2_U8_NDARR(X) X.attr("toarray")("F").attr("astype")("uint8")
+
+#if defined(TIMING_OBPOTF)
+std::chrono::_V2::system_clock::time_point vf_start_time;
+std::chrono::_V2::system_clock::time_point vf_stop_time;
+std::chrono::nanoseconds::rep vf_duration_ns;
+#define  START_CHRONO   vf_start_time = std::chrono::high_resolution_clock::now();
+#define  STOP_CHRONO(str)  {\
+   vf_stop_time = std::chrono::high_resolution_clock::now(); \
+   vf_duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(vf_stop_time-vf_start_time).count(); \
+   std::cout << str << vf_duration_ns*1e-9 << std::setprecision(9) << " s" << std::endl; \
+   }
+#else
+#define START_CHRONO
+#define STOP_CHRONO(str)
+#endif
 
 /***********************************************************************************************************************
  * FILE GLOBAL VARIABLES
@@ -585,16 +606,23 @@ py::array_t<uint8_t> OBPOTF::cln_decode(py::array_t<uint8_t, C_FMT> const & synd
 {
    // First BP stage
    std::vector<uint8_t> u8_syndrome(syndrome.data(), syndrome.data() + syndrome.size());
+
+   START_CHRONO
    std::vector<uint8_t> u8_recovered_err = m_po_pcm_bp->decode(u8_syndrome);
-   std::vector<uint8_t> vec_u8_res;
+   STOP_CHRONO("First Stage decode: ")
 
    if (false == m_po_pcm_bp->converge)
    {
       // Second BP stage in case it does not converge.
       std::vector<double> vec_f_llrs = m_po_pcm_bp->log_prob_ratios;
+
+      START_CHRONO
       std::vector<double> vec_f_mapped_probs = this->propagate(vec_f_llrs);
-      m_po_phen_bp->channel_probabilities = vec_f_mapped_probs;
+      STOP_CHRONO("Propagate: ")
+
+      START_CHRONO
       u8_recovered_err = m_po_phen_bp->decode(u8_syndrome);
+      STOP_CHRONO("Second Stage decode: ")
       
       if (false == m_po_phen_bp->converge)
       {
@@ -605,10 +633,9 @@ py::array_t<uint8_t> OBPOTF::cln_decode(py::array_t<uint8_t, C_FMT> const & synd
          std::vector<double> updated_probs(m_u64_pcm_cols, 0.0);
          uint64_t u64_col_chosen_sz = columns_chosen.size();
          for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
-            updated_probs[columns_chosen[u64_idx]] = m_p;
-
-         m_po_otf_bp->channel_probabilities = updated_probs;
+         START_CHRONO
          u8_recovered_err = m_po_otf_bp->decode(u8_syndrome);
+         STOP_CHRONO("Third Stage decode: ")
       }
       vec_u8_res = mat_vec_mul(*(m_ps_dem_data->po_phen_obs_csc), u8_recovered_err);
    }
