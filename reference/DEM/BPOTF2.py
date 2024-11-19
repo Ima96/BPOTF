@@ -224,7 +224,7 @@ class UFCLN:
         # Si converge devolvemos el error.
         if self._bpd.converge:
             recovered_error = (self.obs @ recovered_error) % 2
-            return recovered_error, 0
+            return recovered_error, 1
         # print('BP2')
         # Si no converge, nos quedamos con las llrs.
         llrs = self._bpd.log_prob_ratios
@@ -262,7 +262,7 @@ class UFCLN:
             # b = time.perf_counter()
             # average_time = b-a
             
-            updated_probs = np.full(self.columns, 1e-9)
+            updated_probs = np.full(self.H_phen.shape[1], 1e-9)
             updated_probs[columns_chosen] = ps_e[columns_chosen]
             # updated_probs[columns_chosen] = self.priors_phen[columns_chosen]
         
@@ -273,12 +273,12 @@ class UFCLN:
             # if not self._bpd3.converge:
             #     print('Rare error')
             second_recovered_error = (self.obs_phen @ second_recovered_error) % 2
-            return second_recovered_error, 0
+            return second_recovered_error, 3
         # else: print('Yes convergence')
         second_recovered_error = (self.obs_phen @ second_recovered_error) % 2
         # if not np.all(error_edge == second_recovered_error):
         #     pass
-        return second_recovered_error, 0
+        return second_recovered_error, 2
     
     
     

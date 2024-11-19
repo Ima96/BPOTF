@@ -50,7 +50,7 @@ transfer_mat_T = transfer_mat.transpose()
 print(transfer_mat.shape)
 
 start_bpotf = timer()
-bpotf = BPOTF.OBPOTF(dem, 0.01, BPOTF.NoiseType.CLN, transfer_mat.astype('uint8'))
+bpotf = BPOTF.OBPOTF(dem, 0.01, BPOTF.OBPOTF.NoiseType.E_CLN, transfer_mat.astype('uint8'))
 stop_bpotf = timer()
 
 start_ton = timer()
