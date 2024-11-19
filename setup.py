@@ -1,11 +1,19 @@
 # Available at setup time due to pyproject.toml
 from pybind11.setup_helpers import Pybind11Extension, ParallelCompile, build_ext
-from setuptools import setup
+from setuptools import setup 
 import sys
 import os
 import glob
 
-__version__ = "0.0.1"
+def compose_version() -> str:
+    version = "Dev0"
+    with open("version", "r") as ver_file:
+        version_components = [line.split()[1] for line in ver_file if len(line.split()) >= 2]
+        version = ".".join(version_components)
+    return version
+
+
+__version__ = compose_version()
 
 if os.path.exists("./build") is not True:
     os.mkdir("./build")
@@ -21,7 +29,8 @@ else:
     os.environ["CXX"] = "g++"
     std = "2a"
     #os.environ["CFLAGS"] = "-O3"
-    os.environ["CPPFLAGS"] = "-O3"
+    defines = f"-DBPOTF_VERSION=\'\"{__version__}\"\'"
+    os.environ["CPPFLAGS"] = "-O3 -Wstack-protector -flto=auto" + " " + defines
     extra_link_args =[]
 
 # The main interface is through Pybind11Extension.
@@ -59,10 +68,10 @@ ext_modules = [
 
 setup(
     name="BPOTF",
-    version=__version__,
+    version=compose_version(),
     author="Imanol Etxezarreta",
     author_email="ietxezarretam@gmail.com",
-    url="https://github.com/Ademartio/BPBP/tree/OBPOTF",
+    url="https://github.com/Ademartio/BPOTF",
     description="Implementation of Belief Propagation Ordered Tanner Forest decoding method.",
     long_description="",
     ext_modules=ext_modules,

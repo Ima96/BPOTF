@@ -24,6 +24,10 @@ namespace py = pybind11;
 // Bindings for the BPOTF module
 // TODO: Add docstrings to the methods and attributes.
 PYBIND11_MODULE(BPOTF, BPOTF) {
+   
+   // Set module's version (set at compile time)
+   BPOTF.attr("__version__") = BPOTF_VERSION;
+
    // Export class
    auto py_BPOTF = py::class_<OBPOTF>(BPOTF, "OBPOTF");
 
