@@ -68,6 +68,8 @@ static py::object vf_stim_dem_type = py::module_::import("stim").attr("DetectorE
 static py::function vf_dem2cm = py::reinterpret_borrow<py::function>(
    py::module_::import("stimbposd").attr("detector_error_model_to_check_matrices"));
 
+const double vfc_initial_llr_value = std::log((1.0 - 1e-14) / 1e-14);
+
 /***********************************************************************************************************************
  * Helper functions
  **********************************************************************************************************************/
@@ -307,7 +309,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm)
 
    // Create BpDecoder to use against the pcm after OTF.
    m_po_otf_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_pcm,
-                                                std::vector<double>(m_u64_pcm_cols, 0),
+                                                std::vector<double>(m_u64_pcm_cols, 1e-14),
                                                 m_u64_pcm_cols,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
@@ -394,10 +396,6 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    m_u64_pcm_rows = m_po_csc_mat->get_row_num();
    m_u64_pcm_cols = m_po_csc_mat->get_col_num();
 
-   // Form the vector of indexes to be sorted
-   m_au64_index_array = std::vector<uint64_t>(m_u64_pcm_cols);
-   std::iota(m_au64_index_array.begin(), m_au64_index_array.end(), 0UL);
-
    // Create objects for the phenomenological matrices and populate them
    uint64_t u64_obs_csr_rows = m_ps_dem_data->po_obs_csr_mat->get_row_num();
    std::vector<uint8_t> pu8_expanded_cm_pcm = m_po_csc_mat->expand_to_column_major();
@@ -452,6 +450,10 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
          m_po_bpsparse_phen->insert_entry(u64_r_idx, u64_c_idx);
       }
    }
+   
+   // Form the vector of indexes to be sorted
+   m_au64_index_array = std::vector<uint64_t>(u64_phen_col_num);
+   std::iota(m_au64_index_array.begin(), m_au64_index_array.end(), 0UL);
 
    // Create the channel error probabilities vector from the obtained priors.
    std::vector<double> channel_errors(m_ps_dem_data->af64_priors.data(), 
@@ -469,7 +471,7 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
 
    // Create BpDecoder to use against the phenomenological pcm.
    m_po_phen_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen,
-                                                std::vector<double>(u64_phen_col_num, 0),
+                                                std::vector<double>(u64_phen_col_num, 1e-14),
                                                 100,//u64_phen_col_num,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
@@ -479,7 +481,7 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
 
    // Create BpDecoder to use against the pcm after OTF.
    m_po_otf_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen,
-                                                std::vector<double>(u64_phen_col_num, 0),
+                                                std::vector<double>(u64_phen_col_num, 1e-14),
                                                 100,//u64_phen_col_num,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
@@ -586,24 +588,26 @@ py::array_t<uint8_t> OBPOTF::generic_decode(py::array_t<uint8_t, C_FMT> const & 
    if (false == m_po_pcm_bp->converge)
    {
       std::vector<double> llrs = m_po_pcm_bp->log_prob_ratios;
+      std::vector<double> vec_f_probs = this->get_probs_from_llrs(llrs);
 
-      std::vector<uint64_t> columns_chosen = this->otf_uf(llrs);
+      std::vector<uint64_t> columns_chosen = this->otf_uf_probs(m_po_csc_mat, vec_f_probs);
 
-      std::vector<double> updated_probs(m_u64_pcm_cols, 0.0);
+      std::vector<double> updated_probs(m_u64_pcm_cols, 1e-14);
       uint64_t u64_col_chosen_sz = columns_chosen.size();
       for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
          updated_probs[columns_chosen[u64_idx]] = m_p;
 
-      m_po_otf_bp->channel_probabilities = updated_probs;
+      // TODO: change channel probs to initial_logs and test...
+      m_po_otf_bp->update_channel_probs(updated_probs);
       u8_recovered_err = m_po_otf_bp->decode(u8_syndrome);
    }
 
    return as_pyarray(std::move(u8_recovered_err));
 }
 
-// TODO: implement cln decoding.
 py::array_t<uint8_t> OBPOTF::cln_decode(py::array_t<uint8_t, C_FMT> const & syndrome)
 {
+   std::vector<uint8_t> vec_u8_res;
    // First BP stage
    std::vector<uint8_t> u8_syndrome(syndrome.data(), syndrome.data() + syndrome.size());
 
@@ -620,6 +624,9 @@ py::array_t<uint8_t> OBPOTF::cln_decode(py::array_t<uint8_t, C_FMT> const & synd
       std::vector<double> vec_f_mapped_probs = this->propagate(vec_f_llrs);
       STOP_CHRONO("Propagate: ")
 
+      // m_po_phen_bp->channel_probabilities = vec_f_mapped_probs;
+      m_po_phen_bp->update_channel_probs(vec_f_mapped_probs);
+
       START_CHRONO
       u8_recovered_err = m_po_phen_bp->decode(u8_syndrome);
       STOP_CHRONO("Second Stage decode: ")
@@ -628,41 +635,60 @@ py::array_t<uint8_t> OBPOTF::cln_decode(py::array_t<uint8_t, C_FMT> const & synd
       {
          // Third stage with OTF
          vec_f_llrs = m_po_phen_bp->log_prob_ratios;
-         std::vector<uint64_t> columns_chosen = this->otf_uf(vec_f_llrs);
+         std::vector<double> vec_f_probs = this->get_probs_from_llrs(vec_f_llrs);
+         START_CHRONO
+         // std::vector<uint64_t> columns_chosen = this->otf_uf(m_ps_dem_data->po_phen_pcm_csc, vec_f_llrs);
+         std::vector<uint64_t> columns_chosen = this->otf_uf_probs(m_ps_dem_data->po_phen_pcm_csc, vec_f_probs);
+         STOP_CHRONO("OTF: ")
 
-         std::vector<double> updated_probs(m_u64_pcm_cols, 0.0);
+         // std::vector<double> updated_llrs(m_ps_dem_data->po_phen_pcm_csc->get_col_num() , vfc_initial_llr_value);
+         std::vector<double> updated_llrs(m_ps_dem_data->po_phen_pcm_csc->get_col_num() , 1e-9);
          uint64_t u64_col_chosen_sz = columns_chosen.size();
+         std::cout << "CPP OTF column chosen num: " << u64_col_chosen_sz << std::endl;
          for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
+         {
+            uint64_t u64_col_idx = columns_chosen[u64_idx];
+            // updated_llrs[u64_col_idx] = vec_f_llrs[u64_col_idx];
+            updated_llrs[u64_col_idx] = vec_f_probs[u64_col_idx];
+         }
+         // m_po_otf_bp->initial_log_prob_ratios = updated_llrs;
+         m_po_otf_bp->update_channel_probs(updated_llrs);
+
          START_CHRONO
          u8_recovered_err = m_po_otf_bp->decode(u8_syndrome);
          STOP_CHRONO("Third Stage decode: ")
       }
-      vec_u8_res = mat_vec_mul(*(m_ps_dem_data->po_phen_obs_csc), u8_recovered_err);
+      
+      START_CHRONO
+      vec_u8_res = mat_vec_mul(*(m_ps_dem_data->po_phen_obs_csr), u8_recovered_err);
+      STOP_CHRONO("Observables check multiplication: ")
    }
    else
    {
-      vec_u8_res = mat_vec_mul(*(m_ps_dem_data->po_obs_csc_mat), u8_recovered_err);
+      START_CHRONO
+      vec_u8_res = mat_vec_mul(*(m_ps_dem_data->po_obs_csr_mat), u8_recovered_err);
+      STOP_CHRONO("Observables check multiplication: ")
    }
 
    return as_pyarray(std::move(vec_u8_res));
 }
 
-std::vector<uint64_t> OBPOTF::sort_indexes(py::array_t<double> const & llrs) 
+std::vector<uint64_t> OBPOTF::sort_probs_indexes(py::array_t<double> const & probs) 
 {
    // COPY! Not happy...
    std::vector<uint64_t> idx = m_au64_index_array;
 
    std::sort(idx.begin(), idx.end(), 
-               [&llrs](uint64_t i1, uint64_t i2) 
+               [&probs](uint64_t i1, uint64_t i2) 
                {
-                  return std::less<double>{}(llrs.data()[i1], llrs.data()[i2]);
+                  return std::greater<double>{}(probs.data()[i1], probs.data()[i2]);
                }
             );
 
    return idx;
 }
 
-std::vector<uint64_t *> OBPOTF::sort_indexes_nc(std::vector<double> const & llrs) 
+std::vector<uint64_t *> OBPOTF::sort_probs_indexes_nc(std::vector<double> const & probs) 
 {
    std::vector<uint64_t *> idx(m_au64_index_array.size());
 
@@ -672,16 +698,17 @@ std::vector<uint64_t *> OBPOTF::sort_indexes_nc(std::vector<double> const & llrs
 
    // Using std::sort assures a worst-case scenario of time complexity O(n*log(n))
    std::sort(idx.begin(), idx.end(), 
-               [&llrs](uint64_t * i1, uint64_t * i2) 
+               [&probs](uint64_t * i1, uint64_t * i2) 
                {
-                  return std::less<double>{}(llrs[*i1], llrs[*i2]);
+                  // return std::less<double>{}(llrs[*i1], llrs[*i2]);
+                  return std::greater<double>{}(probs[*i1], probs[*i2]);
                }
             );
 
    return idx;
 }
 
-std::vector<uint64_t *> OBPOTF::sort_indexes_nc(std::span<double> const & llrs) 
+std::vector<uint64_t *> OBPOTF::sort_probs_indexes_nc(std::span<double> const & probs) 
 {
    std::vector<uint64_t *> idx(m_au64_index_array.size());
 
@@ -691,26 +718,26 @@ std::vector<uint64_t *> OBPOTF::sort_indexes_nc(std::span<double> const & llrs)
 
    // Using std::sort assures a worst-case scenario of time complexity O(n*log(n))
    std::sort(idx.begin(), idx.end(), 
-               [&llrs](uint64_t * i1, uint64_t * i2) 
+               [&probs](uint64_t * i1, uint64_t * i2) 
                {
-                  return std::less<double>{}(llrs[*i1], llrs[*i2]);
+                  return std::greater<double>{}(probs[*i1], probs[*i2]);
                }
             );
 
    return idx;
 }
 
-std::vector<uint64_t> OBPOTF::otf_classical_uf(std::vector<double> const & llrs)
+std::vector<uint64_t> OBPOTF::otf_classical_uf_probs(OCSC const * const po_csc_mat, std::vector<double> const & probs)
 {
-   // uint16_t const & hog_rows = m_po_csc_mat->get_row_num();
-   uint64_t const & hog_cols = m_u64_pcm_cols;
+   uint16_t const & hog_rows = po_csc_mat->get_row_num();
+   uint64_t const & hog_cols = po_csc_mat->get_col_num();
    
    std::vector<uint64_t> columns_chosen;
    columns_chosen.reserve(hog_cols);
 
-   std::vector<uint64_t *> sorted_idxs = this->sort_indexes_nc(llrs);
+   std::vector<uint64_t *> sorted_idxs = this->sort_probs_indexes_nc(probs);
 
-   DisjSet clstr_set = DisjSet(m_u64_pcm_rows);
+   DisjSet clstr_set = DisjSet(hog_rows);
 
    uint64_t u64_sorted_idxs_sz = sorted_idxs.size();
    for (uint64_t col_idx = 0UL; col_idx < u64_sorted_idxs_sz; ++col_idx)
@@ -745,15 +772,15 @@ std::vector<uint64_t> OBPOTF::otf_classical_uf(std::vector<double> const & llrs)
    return columns_chosen;
 }
 
-std::vector<uint64_t> OBPOTF::otf_uf(std::vector<double> const & llrs)
+std::vector<uint64_t> OBPOTF::otf_uf_probs(OCSC const * const po_csc_mat, std::vector<double> const & probs)
 {
-   uint16_t const & csc_rows = m_po_csc_mat->get_row_num(); // Already accounts for virtual checks
-   uint64_t const & csc_cols = m_po_csc_mat->get_col_num();
+   uint16_t const & csc_rows = po_csc_mat->get_row_num(); // Already accounts for virtual checks
+   uint64_t const & csc_cols = po_csc_mat->get_col_num();
    
    std::vector<uint64_t> columns_chosen;
    columns_chosen.reserve(csc_cols);
 
-   std::vector<uint64_t *> sorted_idxs = this->sort_indexes_nc(llrs);
+   std::vector<uint64_t *> sorted_idxs = this->sort_probs_indexes_nc(probs);
 
    DisjSet clstr_set = DisjSet(csc_rows);
 
@@ -761,7 +788,7 @@ std::vector<uint64_t> OBPOTF::otf_uf(std::vector<double> const & llrs)
    for (uint64_t col_idx = 0UL; col_idx < u64_sorted_idxs_sz; ++col_idx)
    {
       uint64_t effective_col_idx = *(sorted_idxs[col_idx]);
-      std::span<uint64_t> column_sp = m_po_csc_mat->get_col_row_idxs_fast(effective_col_idx);
+      std::span<uint64_t> column_sp = po_csc_mat->get_col_row_idxs_fast(effective_col_idx);
       
       std::vector<uint8_t> checker(csc_rows, 0);
       std::vector<int> depths = {0, -1, 0};
@@ -811,7 +838,7 @@ std::vector<uint64_t> OBPOTF::otf_uf(std::vector<double> const & llrs)
    return columns_chosen;
 }
 
-py::array_t<uint64_t> OBPOTF::otf_uf(py::array_t<double, C_FMT> const & llrs)
+py::array_t<uint64_t> OBPOTF::otf_uf_probs(py::array_t<double, C_FMT> const & probs)
 {
    uint16_t const & csc_rows = m_po_csc_mat->get_row_num(); // Already accounts for virtual checks
    uint64_t const & csc_cols = m_po_csc_mat->get_col_num();
@@ -819,8 +846,8 @@ py::array_t<uint64_t> OBPOTF::otf_uf(py::array_t<double, C_FMT> const & llrs)
    std::vector<uint64_t> columns_chosen;
    columns_chosen.reserve(csc_cols);
 
-   std::span<double> llrs_sp = toSpan1D<double>(llrs);
-   std::vector<uint64_t *> sorted_idxs = this->sort_indexes_nc(llrs_sp);
+   std::span<double> llrs_sp = toSpan1D<double>(probs);
+   std::vector<uint64_t *> sorted_idxs = this->sort_probs_indexes_nc(llrs_sp);
 
    DisjSet clstr_set = DisjSet(csc_rows);
 
@@ -878,7 +905,24 @@ py::array_t<uint64_t> OBPOTF::otf_uf(py::array_t<double, C_FMT> const & llrs)
    return as_pyarray(std::move(columns_chosen));
 }
 
-std::vector<double> OBPOTF::propagate(std::vector<double> const & vec_f_llrs)
+double OBPOTF::compute_probability_from_log(double const & f64_log_val)
+{
+   double f64_res_prob = 1e-14;
+
+   f64_res_prob = 1.0 / (1.0 + std::exp(f64_log_val));
+   if (f64_res_prob > (1.0 - 1e-14))
+   {
+      f64_res_prob = 1.0 - 1e-14;
+   }
+   else if (f64_res_prob < 1e-14)
+   {
+      f64_res_prob = 1e-14;
+   }
+
+   return f64_res_prob;
+}
+
+std::vector<double> OBPOTF::get_probs_from_llrs(std::vector<double> const & vec_f_llrs)
 {
    std::vector<double> vec_f_probs;
    vec_f_probs.resize(vec_f_llrs.size());
@@ -886,17 +930,15 @@ std::vector<double> OBPOTF::propagate(std::vector<double> const & vec_f_llrs)
    // To get actual probabilities from the log_prob_ratios
    for (uint64_t u64_idx = 0U; u64_idx < u64_probs_len; ++u64_idx)
    {
-      vec_f_probs[u64_idx] = 1.0 / (1.0 + std::exp(vec_f_llrs[u64_idx]));
-      if (vec_f_probs[u64_idx] > (1.0 - 1e-14))
-      {
-         vec_f_probs[u64_idx] = 1.0 - 1e-14;
-      }
-      else if (vec_f_probs[u64_idx] < 1e-14)
-      {
-         vec_f_probs[u64_idx] = 1e-14;
-      }
+      vec_f_probs[u64_idx] = this->compute_probability_from_log(vec_f_llrs[u64_idx]);
    }
 
+   return vec_f_probs;
+}
+
+std::vector<double> OBPOTF::propagate(std::vector<double> const & vec_f_llrs)
+{
+   std::vector<double> vec_f_probs = this->get_probs_from_llrs(vec_f_llrs);
    std::vector<double> vec_f_mapped_probs;
    uint64_t u64_res_len = m_ps_dem_data->po_transfer_csr_mat->get_row_num();
    vec_f_mapped_probs.resize(u64_res_len);

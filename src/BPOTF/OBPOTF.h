@@ -141,49 +141,56 @@ class OBPOTF
    /********************************************************************************************************************
     * @brief This routine performs the OTF algorithm using the clasical Unified-Find method.
     * 
-    * @param llrs[in]   The llrs is a vector containing the probabilities of the PCM columns.
+    * // TODO: Add documentation about po_csc_mat
+    * @param probs[in]   The llrs is a vector containing the probabilities of the PCM columns.
     * @return std::vector<uint64_t> The return value is a vector containing the recovered error.
     *******************************************************************************************************************/
-   std::vector<uint64_t> otf_classical_uf(std::vector<double> const & llrs);
+   std::vector<uint64_t> otf_classical_uf_probs(OCSC const * const po_csc_mat, std::vector<double> const & probs);
 
    /********************************************************************************************************************
-    * @brief This routine performs the OTF algorithm.
+    * @brief This routine performs the OTF algorithm against the channel probabilities.
     * 
-    * @param llrs[in]   The llrs is a vector containing the probabilities of the PCM columns.
+    * // TODO: Add documentation about po_csc_mat
+    * @param probs[in]   The probs parameter is a vector containing the probabilities of the PCM columns.
     * @return std::vector<uint64_t> The return value is a vector containing the recovered error.
     *******************************************************************************************************************/
-   std::vector<uint64_t> otf_uf(std::vector<double> const & llrs);
+   std::vector<uint64_t> otf_uf_probs(OCSC const * const po_csc_mat, std::vector<double> const & probs);
 
    /********************************************************************************************************************
-    * @brief This routine returns a vector of the sorted indexes based on the probabilities of the llrs. It copies the 
-    *        initial vector with the unsorted indexes from the member variable m_au64_index_array.
+    * @brief This routine returns a vector of the sorted indexes based on the channel probabilities. It copies the 
+    *        initial vector with the unsorted indexes from the member variable m_au64_index_array. Sorting from 
+    *        greatest to smallest.
     * 
-    * @param llrs[in]   The llrs is a vector containing the probabilities of the PCM columns.
-    * @return std::vector<uint64_t> The return variable is a vector with the sorted indexes according the llrs.
+    * @param probs[in]   The probs parameter is a vector containing the probabilities of the PCM columns.
+    * @return std::vector<uint64_t> The return variable is a vector with the sorted indexes according the probs.
     *******************************************************************************************************************/
-   std::vector<uint64_t> sort_indexes(py::array_t<double> const & llrs);
+   std::vector<uint64_t> sort_probs_indexes(py::array_t<double> const & probs);
 
    /********************************************************************************************************************
     * @brief This routine returns a sorted vector of pointers to the sorted indexes stored in the member variable
-    *        m_au64_index_array, based on the probabilities in the llrs.
+    *        m_au64_index_array, based on the channel probabilities. Sorting from greatest to smallest.
     * 
-    * @param llrs[in]   The llrs is a vector containing the probabilities of the PCM columns.
+    * @param probs[in]   The probs parameter is a vector containing the probabilities of the PCM columns.
     * @return std::vector<uint64_t *> The return variable is a sorted vector of pointers to the indexes based on the
-    *                                 llrs.
+    *                                 probs.
     *******************************************************************************************************************/
-   std::vector<uint64_t *> sort_indexes_nc(std::vector<double> const & llrs);
+   std::vector<uint64_t *> sort_probs_indexes_nc(std::vector<double> const & probs);
 
    /********************************************************************************************************************
     * @brief This routine returns a sorted vector of pointers to the sorted indexes stored in the member variable
-    *        m_au64_index_array, based on the probabilities in the llrs.
+    *        m_au64_index_array, based on the channel probabilities. Sorting from greatest to smallest.
     * 
-    * @param llrs[in]   The llrs is a span containing the probabilities of the PCM columns.
+    * @param probs[in]   The llrs is a span containing the probabilities of the PCM columns.
     * @return std::vector<uint64_t *> The return variable is a sorted vector of pointers to the indexes based on the
-    *                                 llrs.
+    *                                 probs.
     *******************************************************************************************************************/
-   std::vector<uint64_t *> sort_indexes_nc(std::span<double> const & llrs);
+   std::vector<uint64_t *> sort_probs_indexes_nc(std::span<double> const & probs);
 
-   std::vector<double> propagate(std::vector<double> const & vec_f_probs);
+   double compute_probability_from_log(double const & f64_log_val);
+
+   std::vector<double> get_probs_from_llrs(std::vector<double> const & vec_f_llrs);
+
+   std::vector<double> propagate(std::vector<double> const & vec_f_llrs);
 
    /********************************************************************************************************************
     * @brief This routine executes a generic decode procedure, which is done for surface-codes. It is registered as a 
@@ -233,14 +240,14 @@ class OBPOTF
    ~OBPOTF();
 
    /********************************************************************************************************************
-    * @brief This routine performs the OTF algorithm.
+    * @brief This routine performs the OTF algorithm against the channel probabilities.
     * 
     * (It is public right now because Ton needed only this part of the algorithm for some tests)
     * 
-    * @param llrs[in]   The llrs is a vector containing the probabilities of the PCM columns.
+    * @param probs[in]   The probs parameter is a vector containing the probabilities of the PCM columns.
     * @return py::array_t<uint64_t> The return value is a py::array_t containing the recovered error.
     *******************************************************************************************************************/
-   py::array_t<uint64_t> otf_uf(py::array_t<double, C_FMT> const & llrs);
+   py::array_t<uint64_t> otf_uf_probs(py::array_t<double, C_FMT> const & probs);
 
    /********************************************************************************************************************
     * @brief This is the main decoding routine. This routine calls the registered callback function in 
