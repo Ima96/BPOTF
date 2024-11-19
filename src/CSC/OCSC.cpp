@@ -309,7 +309,7 @@ std::vector<uint8_t> OCSC::expand_to_row_major(void)
    return res_vec;
 }
 
-uint64_t OCSC::get_col_nnz(uint64_t const & u64_col)
+uint64_t OCSC::get_col_nnz(uint64_t const & u64_col) const
 {
    if (u64_col > m_u64_n)
    {
@@ -319,7 +319,7 @@ uint64_t OCSC::get_col_nnz(uint64_t const & u64_col)
    return m_pu64_indptr[u64_col+1] - m_pu64_indptr[u64_col];
 }
 
-std::vector<uint64_t> OCSC::get_col_row_idxs(uint64_t const & u64_col)
+std::vector<uint64_t> OCSC::get_col_row_idxs(uint64_t const & u64_col) const
 {
    std::vector<uint64_t> u64_res_vec;
    uint64_t u64_col_nnz = this->get_col_nnz(u64_col);
@@ -335,7 +335,7 @@ std::vector<uint64_t> OCSC::get_col_row_idxs(uint64_t const & u64_col)
    return u64_res_vec;
 }
 
-std::span<uint64_t> OCSC::get_col_row_idxs_fast(uint64_t const & u64_col)
+std::span<uint64_t> OCSC::get_col_row_idxs_fast(uint64_t const & u64_col) const
 {
    std::span<uint64_t> u64_res_sp;
    uint64_t u64_col_nnz = this->get_col_nnz(u64_col);
