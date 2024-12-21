@@ -22,8 +22,6 @@ else:
 
 from beliefmatching import detector_error_model_to_check_matrices
 
-
-
 # This class will attempt to correct BB codes under circuit-level noise
 class UFCLN:
     def __init__(self,
@@ -32,14 +30,16 @@ class UFCLN:
                  d : int = 6
                  ):
         
-        assert d in [6,9,12]
+        assert d in [6,9,12,18]
         
         if d == 6: # l = 6, m = 6
             conts = sio.loadmat('transfermatrices/transferMatrixcodel6m6.mat')
         elif d == 9:# l = 9, m = 6
             conts = sio.loadmat('transfermatrices/transferMatrixcodel9m6.mat')
-        else: # l = 12, m = 6
+        elif d == 12: # l = 12, m = 6
             conts = sio.loadmat('transfermatrices/transferMatrixcodel12m6.mat')
+        else:
+            conts = sio.loadmat('transfermatrices/BB288CSC.mat')
             
         bm = detector_error_model_to_check_matrices(dem, allow_undecomposed_hyperedges)
         
@@ -57,7 +57,8 @@ class UFCLN:
         self.obs_phen = self.obs[:,np.where(columns_to_consider==1)[0]]
         
 
-        self.transf_M = conts['transfMat']
+        self.transf_M = conts['transfMat'].toarray()
+        del conts
         
         max_numb_cols = 0
         for row in range(self.transf_M.shape[0]):
@@ -107,7 +108,8 @@ class UFCLN:
             # Place these indices in the corresponding column of index_matrix
             self.index_matrix[:len(row_indices), column] = row_indices
         
-        # print('Preprocessing ready!')
+        del self.transf_M
+        print('Preprocessing ready!')
         
     def SetCluster(self):
         """Set the clusters which will be grown via Union Find.
@@ -220,14 +222,23 @@ class UFCLN:
                 
     def decode(self, syndrome : np.array):
         # Usamos el primer BP para encontrar el error.
+        start = timer()
         recovered_error = self._bpd.decode(syndrome)
+        end = timer()
+        #print(f"[Python] First stage bp: {end-start}")
         # Si converge devolvemos el error.
         if self._bpd.converge:
+            # print(self.obs.shape)
+            # print(recovered_error.shape)
+            start = timer()
             recovered_error = (self.obs @ recovered_error) % 2
+            end = timer()
+            #print(f"[Python] Observables check multiplication: {end-start}")
             return recovered_error, 1
         # print('BP2')
         # Si no converge, nos quedamos con las llrs.
         llrs = self._bpd.log_prob_ratios
+        # print(llrs)
         ps_h = 1 / (1 + np.exp(llrs))
         eps = 1e-14
         ps_h[ps_h > 1 - eps] = 1 - eps
@@ -237,13 +248,19 @@ class UFCLN:
         
         # Este cambio, en vez de hacerlo así, vamos a considerar una nueva manera de hacer 
         # ps_e = self.transf_M @ ps_h      
+        start = timer()
         ps_e = self.propagation(ps_h)
+        end = timer()
+        #print(f"[Python] Propagate: {end-start}")
         #return ps_e, 0
         
         # updated_probs[columns_chosen] = self.priors_phen[columns_chosen].flatten()
         self._bpd2.update_channel_probs(ps_e)
         # Luego le damos a decode.
+        start = timer()
         second_recovered_error = self._bpd2.decode(syndrome)
+        end = timer()
+        #print(f"[Python] Second stage bp: {end-start}")
         
         if not self._bpd2.converge:
             # print('NO CONVERGENCE')
@@ -254,7 +271,8 @@ class UFCLN:
             eps = 1e-14      
             ps_e[ps_e > 1 - eps] = 1 - eps
             ps_e[ps_e < eps] = eps
-            
+
+            start = timer()
             sorted_indices = self.sort_matrix(ps_e)
             # a = time.perf_counter()
             # Nos quedamos con las columnas linearmente independientes.
@@ -269,13 +287,22 @@ class UFCLN:
         
             # updated_probs[columns_chosen] = self.priors_phen[columns_chosen].flatten()
             self._bpd3.update_channel_probs(updated_probs)
+            start = timer()
             second_recovered_error = self._bpd3.decode(syndrome)
+            end = timer()
+            #print(f"[Python] Third stage bp: {end-start}")
             # if not self._bpd3.converge:
             #     print('Rare error')
+            start = timer()
             second_recovered_error = (self.obs_phen @ second_recovered_error) % 2
+            end = timer()
+            #print(f"[Python] Observables check multiplication: {end-start}")
             return second_recovered_error, 3
         # else: print('Yes convergence')
+        start = timer()
         second_recovered_error = (self.obs_phen @ second_recovered_error) % 2
+        end = timer()
+        #print(f"[Python] Observables check multiplication: {end-start}")
         # if not np.all(error_edge == second_recovered_error):
         #     pass
         return second_recovered_error, 2
