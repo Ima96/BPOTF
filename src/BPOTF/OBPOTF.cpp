@@ -58,21 +58,29 @@ std::chrono::nanoseconds::rep vf_duration_ns;
 /***********************************************************************************************************************
  * FILE GLOBAL VARIABLES
  **********************************************************************************************************************/
-// Import scipy.sparse.csc_matrix type 
-static py::object vf_scipy_csc_type = py::module_::import("scipy.sparse").attr("csc_matrix");
-// Import stim DEM
-static py::object vf_stim_dem_type = py::module_::import("stim").attr("DetectorErrorModel");
-// Import detector_error_model_to_check_matrices from beliefmatching
-// static py::function vf_dem2cm = py::reinterpret_borrow<py::function>(
-//    py::module_::import("dem2checks").attr("detector_error_model_to_check_matrices"));
-static py::function vf_dem2cm = py::reinterpret_borrow<py::function>(
-   py::module_::import("stimbposd").attr("detector_error_model_to_check_matrices"));
+// Global variable that holds scipy.sparse.csc_matrix type 
+py::object vf_scipy_csc_type;
+// Global variable that holds stim.DetectorErrorModel
+py::object vf_stim_dem_type;
+// Global variable that holds detector_error_model_to_check_matrices fuction from beliefmatching
+py::function vf_dem2cm;
 
 const double vfc_initial_llr_value = std::log((1.0 - 1e-14) / 1e-14);
 
 /***********************************************************************************************************************
  * Helper functions
  **********************************************************************************************************************/
+void initialize_BPOTF_dependencies(void)
+{
+   // Import scipy.sparse.csc_matrix from scipy
+   vf_scipy_csc_type = py::module_::import("scipy.sparse").attr("csc_matrix");
+   // Import stim.DetectorErrorModel from Stim
+   vf_stim_dem_type = py::module_::import("stim").attr("DetectorErrorModel");
+   // Import beliefmatching.detector_error_model_to_check_matrices from beliefmatching
+   vf_dem2cm = py::reinterpret_borrow<py::function>(
+      py::module_::import("beliefmatching").attr("detector_error_model_to_check_matrices"));
+}
+
 /***********************************************************************************************************************
  * @brief helper function to avoid making a copy when returning a py::array_t
  * 
@@ -644,7 +652,7 @@ py::array_t<uint8_t> OBPOTF::cln_decode(py::array_t<uint8_t, C_FMT> const & synd
          // std::vector<double> updated_llrs(m_ps_dem_data->po_phen_pcm_csc->get_col_num() , vfc_initial_llr_value);
          std::vector<double> updated_llrs(m_ps_dem_data->po_phen_pcm_csc->get_col_num() , 1e-9);
          uint64_t u64_col_chosen_sz = columns_chosen.size();
-         std::cout << "CPP OTF column chosen num: " << u64_col_chosen_sz << std::endl;
+         // std::cout << "CPP OTF column chosen num: " << u64_col_chosen_sz << std::endl;
          for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
          {
             uint64_t u64_col_idx = columns_chosen[u64_idx];

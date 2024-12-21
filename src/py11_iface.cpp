@@ -23,13 +23,17 @@ namespace py = pybind11;
 
 // Bindings for the BPOTF module
 // TODO: Add docstrings to the methods and attributes.
-PYBIND11_MODULE(BPOTF, BPOTF) {
+PYBIND11_MODULE(BPOTF, mBPOTF) {
+
+   // Initialize dependencies. Done this way to ensure that python .so and .dll and dependencies are available when
+   // the imports are called.
+   initialize_BPOTF_dependencies();
    
    // Set module's version (set at compile time)
-   BPOTF.attr("__version__") = BPOTF_VERSION;
+   mBPOTF.attr("__version__") = BPOTF_VERSION;
 
    // Export class
-   auto py_BPOTF = py::class_<OBPOTF>(BPOTF, "OBPOTF");
+   auto py_BPOTF = py::class_<OBPOTF>(mBPOTF, "OBPOTF");
 
    // Export enumeration typedef for different error sources supported
    py::enum_<OBPOTF::ENoiseType_t>(py_BPOTF, "NoiseType")
