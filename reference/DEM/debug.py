@@ -1,6 +1,6 @@
 import scipy.io as sio
 from scipy.sparse import csc_matrix
-conts = sio.loadmat('testBBCLNmap144_12_12_12rounds_p_001.mat')
+# conts = sio.loadmat('testBBCLNmap144_12_12_12rounds_p_001.mat')
 from BPOTF3 import UFCLN
 # from BPOTFog import UFCLN as UFCLN2
 from SlidingWindowDecoder.src.build_circuit import build_circuit
@@ -31,12 +31,12 @@ print(f"BPOTF version is v{bpotf_version}")
 
 PRINTING = False
 
-dem = conts['dem']
-priors = conts['priors']
-transf_M = conts['transfMatFull']
-H_phen = conts['Hphen']
-obs = conts['obs']
-hz = conts['hz']
+# dem = conts['dem']
+# priors = conts['priors']
+# transf_M = conts['transfMatFull']
+# H_phen = conts['Hphen']
+# obs = conts['obs']
+# hz = conts['hz']
 
 BB_TYPE = 108
 if BB_TYPE == 72:
@@ -146,11 +146,11 @@ for index, detection_event in enumerate(detection_events):
     if not np.all(recovered_error == observable_flip):
         py_otf_failed = True
         Pl_py_otf += 1
-        # print('PyOTF failed')
+        print('PyOTF failed')
     if not np.all(recovered_error_cpp == observable_flip):
         cpp_otf_failed = True
         Pl_cpp_otf += 1
-        # print('CppOTF failed')
+        print('CppOTF failed \n')
 
     if ((bposd_failed is True) or (py_otf_failed is True) or (cpp_otf_failed is True)) and PRINTING:
         print(f'Iteration number {index}')

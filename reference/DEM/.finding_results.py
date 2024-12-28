@@ -1,6 +1,6 @@
 import scipy.io as sio
 from scipy.sparse import csc_matrix
-conts = sio.loadmat('testBBCLNmap144_12_12_12rounds_p_001.mat')
+# conts = sio.loadmat('testBBCLNmap144_12_12_12rounds_p_001.mat')
 from BPOTF2 import UFCLN
 # from BPOTFog import UFCLN as UFCLN2
 from SlidingWindowDecoder.src.build_circuit import build_circuit
@@ -31,12 +31,12 @@ print(f"BPOTF version is v{bpotf_version}")
 
 PRINTING = False
 
-dem = conts['dem']
-priors = conts['priors']
-transf_M = conts['transfMatFull']
-H_phen = conts['Hphen']
-obs = conts['obs']
-hz = conts['hz']
+# dem = conts['dem']
+# priors = conts['priors']
+# transf_M = conts['transfMatFull']
+# H_phen = conts['Hphen']
+# obs = conts['obs']
+# hz = conts['hz']
 
 BB_TYPE =  108
 if BB_TYPE == 72:
@@ -48,7 +48,7 @@ elif BB_TYPE == 108:
     # [108, 8, 10]
     code, A_list, B_list = create_bivariate_bicycle_codes(9, 6, [3], [1,2], [1,2], [3])
     d = 10
-    transfer_mat = sio.loadmat('transfermatrices/transferMatrixcodel9m6.mat')['transfMat']
+    transfer_mat = sio.loadmat('transfermatrices/BB108TransfDemsObs.mat')['transfMat']
 elif BB_TYPE == 144:
     # [144, 12, 12]
     code, A_list, B_list = create_bivariate_bicycle_codes(12, 6, [3], [1,2], [1,2], [3])
@@ -65,8 +65,8 @@ else:
 
 name_file_bpbpotf = f'results/bpbpotf{d}bbcode.txt'
 name_file_bposd = f'results/bposd{d}bbcode.txt'
-ps = [1e-3, 2e-3, 3e-3, 4e-3, 5e-3]
-# ps = [ 1e-3]
+# ps = [1e-3, 2e-3, 3e-3, 4e-3, 5e-3]
+ps = [ 1e-3]
 NMC = 10**4
 
 
@@ -175,7 +175,10 @@ for p in ps:
             if not np.all(recovered_error_cpp == observable_flip):
                 cpp_otf_failed = True
                 Pl_cpp_otf += 1
-                # print('CppOTF failed')
+                # print('CppOTF failed \n')
+                # print(observable_flip.astype(int))
+                # print(recovered_error)
+                # print(recovered_error_cpp)
 
             if ((bposd_failed is True) or (py_otf_failed is True) or (cpp_otf_failed is True)) and PRINTING:
                 print(f'Iteration number {index}')
@@ -198,7 +201,7 @@ for p in ps:
 
     pe_bposd = Pl_bposd/number_of_iterations
     ped_bposd = pe_bposd/d
-    pe_py_otf = Pl_py_otf/NMC
+    pe_py_otf = Pl_py_otf/number_of_iterations
     ped_py_otf = pe_py_otf/d
     pe_cpp_otf = Pl_cpp_otf/number_of_iterations
     ped_cpp_otf = pe_cpp_otf/d
