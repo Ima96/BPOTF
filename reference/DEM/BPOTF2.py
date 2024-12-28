@@ -30,12 +30,13 @@ class UFCLN:
                  d : int = 6
                  ):
         
-        assert d in [6,9,12,18]
+        assert d in [6,10,12,18]
         
         if d == 6: # l = 6, m = 6
             conts = sio.loadmat('transfermatrices/transferMatrixcodel6m6.mat')
-        elif d == 9:# l = 9, m = 6
-            conts = sio.loadmat('transfermatrices/transferMatrixcodel9m6.mat')
+        elif d == 10:# l = 9, m = 6
+            # conts = sio.loadmat('transfermatrices/transferMatrixcodel9m6.mat') # This one only has 9 rounds when it should be 10.
+            conts = sio.loadmat('transfermatrices/BB108TransfDemsObs.mat')
         elif d == 12: # l = 12, m = 6
             conts = sio.loadmat('transfermatrices/transferMatrixcodel12m6.mat')
         else:
@@ -56,8 +57,10 @@ class UFCLN:
         self.H_phen = self.H[:,np.where(columns_to_consider==1)[0]]
         self.obs_phen = self.obs[:,np.where(columns_to_consider==1)[0]]
         
-
-        self.transf_M = conts['transfMat'].toarray()
+        print(self.H.shape)
+        print(conts['transfMat'].shape)
+        # self.transf_M = conts['transfMat'].toarray()
+        self.transf_M = conts['transfMat']
         del conts
         
         max_numb_cols = 0
@@ -82,7 +85,7 @@ class UFCLN:
         self._bpd = bp_decoder(
             self.H,
             channel_probs = self.priors,
-            max_iter = 30
+            max_iter = 100
         )
         # Para hacer el segundo BP, en la matriz de los edges y, futúramente fenomenológica
         self._bpd2 = bp_decoder(
@@ -94,7 +97,7 @@ class UFCLN:
         self._bpd3 = bp_decoder(
             self.H_phen,
             channel_probs = priors_phen_zeroes,
-            max_iter = 100
+            max_iter = 30
         )
         
         # Definimos el número máximo de índices por columna
@@ -251,6 +254,11 @@ class UFCLN:
         start = timer()
         ps_e = self.propagation(ps_h)
         end = timer()
+        
+        
+        # ps_e[ps_e > 1 - eps] = 1 - eps
+
+        # ps_e[ps_e < eps] = eps
         #print(f"[Python] Propagate: {end-start}")
         #return ps_e, 0
         

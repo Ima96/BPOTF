@@ -38,7 +38,7 @@ H_phen = conts['Hphen']
 obs = conts['obs']
 hz = conts['hz']
 
-BB_TYPE =  72
+BB_TYPE =  108
 if BB_TYPE == 72:
     # [72, 12, 6] último número es el numero de rondas
     code, A_list, B_list = create_bivariate_bicycle_codes(6, 6, [3], [1,2], [1,2], [3])
@@ -65,12 +65,13 @@ else:
 
 name_file_bpbpotf = f'results/bpbpotf{d}bbcode.txt'
 name_file_bposd = f'results/bposd{d}bbcode.txt'
-ps = [ 2e-3, 3e-3, 4e-3, 5e-3]
+ps = [1e-3, 2e-3, 3e-3, 4e-3, 5e-3]
+# ps = [ 1e-3]
 NMC = 10**4
 
 
 for p in ps:
-
+    print(f'Physical error rate: {p}\n')
     number_of_iterations = 0
     circuit = build_circuit(code, A_list, B_list, 
                             p=p, # physical error rate
@@ -81,7 +82,7 @@ for p in ps:
     dem = circuit.detector_error_model()
     bm = detector_error_model_to_check_matrices(dem, True)
     sampler = circuit.compile_detector_sampler()
-    # myDecoder = UFCLN(dem, d=d)
+    myDecoder = UFCLN(dem, d=d)
     bpbpotf_cpp = BPOTF.OBPOTF(dem, p, BPOTF.OBPOTF.NoiseType.E_CLN, transfer_mat.astype('uint8'))
     bposd = bposd_decoder(
         bm.check_matrix,
@@ -104,11 +105,16 @@ for p in ps:
     # stages_list = []
     updates = 0
 
-    while (Pl_bposd < 100) or (Pl_cpp_otf < 100):
+    # while (Pl_bposd < 100) or (Pl_cpp_otf < 100):
+    while (Pl_cpp_otf < 100):
         print(f'\nNumber of iterations {number_of_iterations}')
         number_of_iterations += NMC
-        print(f'Plbpbpotf {Pl_cpp_otf}')
-        print(f'Plbposd {Pl_bposd}\n')
+        print(f'Number of bpbpotf failures {Pl_cpp_otf}')
+        print(f'Plbpbpotf {Pl_cpp_otf/(d*number_of_iterations)}')
+        print(f'Number of python bpbpotf failures {Pl_py_otf}')
+        print(f'Plbpbpotf python {Pl_py_otf/(d*number_of_iterations)}')
+        print(f'Number of bposd failures {Pl_bposd}')
+        print(f'Plbposd {Pl_bposd/(d*number_of_iterations)}\n')
         
         detection_events, observable_flips = sampler.sample(NMC, separate_observables=True)
         # detection_events = np.concatenate([detection_events, error_case_syndrome])
@@ -130,10 +136,10 @@ for p in ps:
             py_otf_failed = False
             cpp_otf_failed = False
 
-            # start_ton = timer()
-            # recovered_error, stage = myDecoder.decode(detection_event)#[0]
-            # stop_ton = timer()
-            # py_otf_time = (stop_ton-start_ton)
+            start_ton = timer()
+            recovered_error, stage = myDecoder.decode(detection_event)#[0]
+            stop_ton = timer()
+            py_otf_time = (stop_ton-start_ton)
             
             # start_cpp = timer()
             recovered_error_cpp = bpbpotf_cpp.decode(detection_event.astype(np.uint8))
@@ -162,9 +168,9 @@ for p in ps:
                 bposd_failed = True
                 Pl_bposd += 1
                 # print('BPOSD failed')
-            # if not np.all(recovered_error == observable_flip):
-            #     py_otf_failed = True
-            #     Pl_py_otf += 1
+            if not np.all(recovered_error == observable_flip):
+                py_otf_failed = True
+                Pl_py_otf += 1
                 # print('PyOTF failed')
             if not np.all(recovered_error_cpp == observable_flip):
                 cpp_otf_failed = True
@@ -192,8 +198,8 @@ for p in ps:
 
     pe_bposd = Pl_bposd/number_of_iterations
     ped_bposd = pe_bposd/d
-    # pe_py_otf = Pl_py_otf/NMC
-    # ped_py_otf = pe_py_otf/d
+    pe_py_otf = Pl_py_otf/NMC
+    ped_py_otf = pe_py_otf/d
     pe_cpp_otf = Pl_cpp_otf/number_of_iterations
     ped_cpp_otf = pe_cpp_otf/d
 
@@ -206,9 +212,9 @@ for p in ps:
     print(f"BPOSD results:")
     print(f" * p(e): {pe_bposd}")
     print(f" * p(e)/d: {ped_bposd}")
-    # print(f"PyOTF results:")
-    # print(f" * p(e): {pe_py_otf}")
-    # print(f" * p(e)/d: {ped_py_otf}")
+    print(f"PyOTF results:")
+    print(f" * p(e): {pe_py_otf}")
+    print(f" * p(e)/d: {ped_py_otf}")
     print(f"CppOTF results:")
     print(f" * p(e): {pe_cpp_otf}")
     print(f" * p(e)/d: {ped_cpp_otf}")

@@ -1,7 +1,7 @@
 import scipy.io as sio
 from scipy.sparse import csc_matrix
 conts = sio.loadmat('testBBCLNmap144_12_12_12rounds_p_001.mat')
-from BPOTF2 import UFCLN
+from BPOTF3 import UFCLN
 # from BPOTFog import UFCLN as UFCLN2
 from SlidingWindowDecoder.src.build_circuit import build_circuit
 from SlidingWindowDecoder.src.codes_q import create_bivariate_bicycle_codes, create_circulant_matrix
@@ -38,7 +38,7 @@ H_phen = conts['Hphen']
 obs = conts['obs']
 hz = conts['hz']
 
-BB_TYPE = 288
+BB_TYPE = 108
 if BB_TYPE == 72:
     # [72, 12, 6] último número es el numero de rondas
     code, A_list, B_list = create_bivariate_bicycle_codes(6, 6, [3], [1,2], [1,2], [3])
@@ -48,7 +48,7 @@ elif BB_TYPE == 108:
     # [108, 8, 10]
     code, A_list, B_list = create_bivariate_bicycle_codes(9, 6, [3], [1,2], [1,2], [3])
     d = 10
-    transfer_mat = sio.loadmat('transfermatrices/transferMatrixcodel9m6.mat')['transfMat']
+    transfer_mat = sio.loadmat('transfermatrices/BB108TransfDemsObs.mat')['transfMat']
 elif BB_TYPE == 144:
     # [144, 12, 12]
     code, A_list, B_list = create_bivariate_bicycle_codes(12, 6, [3], [1,2], [1,2], [3])
@@ -63,8 +63,8 @@ elif BB_TYPE == 288:
 else:
     raise Exception("No such option!")
 
-p = 0.004
-NMC = 10**2
+p = 1e-3
+NMC = 10**4
 
 circuit = build_circuit(code, A_list, B_list, 
                         p=p, # physical error rate
