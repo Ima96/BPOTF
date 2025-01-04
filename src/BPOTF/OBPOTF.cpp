@@ -470,7 +470,7 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    // Create BpDecoder to use against the pcm
    m_po_pcm_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_pcm,
                                                 channel_errors,
-                                                30,//m_u64_pcm_cols,
+                                                1000,//m_u64_pcm_cols,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
                                                 1.0, 1,
@@ -480,7 +480,7 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    // Create BpDecoder to use against the phenomenological pcm.
    m_po_phen_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen,
                                                 std::vector<double>(u64_phen_col_num, 1e-14),
-                                                100,//u64_phen_col_num,
+                                                1000,//u64_phen_col_num,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
                                                 1.0, 1,
@@ -490,7 +490,7 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    // Create BpDecoder to use against the pcm after OTF.
    m_po_otf_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen,
                                                 std::vector<double>(u64_phen_col_num, 1e-14),
-                                                100,//u64_phen_col_num,
+                                                1000,//u64_phen_col_num,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
                                                 1.0, 1,

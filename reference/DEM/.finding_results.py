@@ -38,7 +38,7 @@ PRINTING = False
 # obs = conts['obs']
 # hz = conts['hz']
 
-BB_TYPE =  108
+BB_TYPE =  144
 if BB_TYPE == 72:
     # [72, 12, 6] último número es el numero de rondas
     code, A_list, B_list = create_bivariate_bicycle_codes(6, 6, [3], [1,2], [1,2], [3])
@@ -65,8 +65,8 @@ else:
 
 name_file_bpbpotf = f'results/bpbpotf{d}bbcode.txt'
 name_file_bposd = f'results/bposd{d}bbcode.txt'
-# ps = [1e-3, 2e-3, 3e-3, 4e-3, 5e-3]
-ps = [ 1e-3]
+ps = [1e-3, 2e-3, 3e-3, 4e-3, 5e-3]
+ps = [ 1e-3, 2e-3]
 NMC = 10**4
 
 
@@ -82,14 +82,14 @@ for p in ps:
     dem = circuit.detector_error_model()
     bm = detector_error_model_to_check_matrices(dem, True)
     sampler = circuit.compile_detector_sampler()
-    myDecoder = UFCLN(dem, d=d)
+    # myDecoder = UFCLN(dem, d=d)
     bpbpotf_cpp = BPOTF.OBPOTF(dem, p, BPOTF.OBPOTF.NoiseType.E_CLN, transfer_mat.astype('uint8'))
-    bposd = bposd_decoder(
-        bm.check_matrix,
-        channel_probs = bm.priors,
-        max_iter = 1000,
-        osd_method = "osd_0"
-    )
+    # bposd = bposd_decoder(
+    #     bm.check_matrix,
+    #     channel_probs = bm.priors,
+    #     max_iter = 1000,
+    #     osd_method = "osd_0"
+    # )
     process = psutil.Process(os.getpid())
     print(f"Memory used: {process.memory_info().rss / 1024 ** 2:.2f} MB")  # Memory in MB
 
@@ -111,8 +111,8 @@ for p in ps:
         number_of_iterations += NMC
         print(f'Number of bpbpotf failures {Pl_cpp_otf}')
         print(f'Plbpbpotf {Pl_cpp_otf/(d*number_of_iterations)}')
-        print(f'Number of python bpbpotf failures {Pl_py_otf}')
-        print(f'Plbpbpotf python {Pl_py_otf/(d*number_of_iterations)}')
+        # print(f'Number of python bpbpotf failures {Pl_py_otf}')
+        # print(f'Plbpbpotf python {Pl_py_otf/(d*number_of_iterations)}')
         print(f'Number of bposd failures {Pl_bposd}')
         print(f'Plbposd {Pl_bposd/(d*number_of_iterations)}\n')
         
@@ -137,7 +137,7 @@ for p in ps:
             cpp_otf_failed = False
 
             start_ton = timer()
-            recovered_error, stage = myDecoder.decode(detection_event)#[0]
+            # recovered_error, stage = myDecoder.decode(detection_event)#[0]
             stop_ton = timer()
             py_otf_time = (stop_ton-start_ton)
             
@@ -147,7 +147,7 @@ for p in ps:
             # cpp_otf_time = (stop_cpp-start_cpp)
 
             # start_bposd = timer()
-            recovered_error2 = (bm.observables_matrix @ bposd.decode(detection_event)) %2
+            # recovered_error2 = (bm.observables_matrix @ bposd.decode(detection_event)) %2
             # end_bposd = timer()
             # bposd_time = (end_bposd-start_bposd)
 
@@ -164,13 +164,13 @@ for p in ps:
 
             # stages_list.append(stage)
             
-            if not np.all(recovered_error2 == observable_flip):
-                bposd_failed = True
-                Pl_bposd += 1
+            # if not np.all(recovered_error2 == observable_flip):
+            #     bposd_failed = True
+            #     Pl_bposd += 1
                 # print('BPOSD failed')
-            if not np.all(recovered_error == observable_flip):
-                py_otf_failed = True
-                Pl_py_otf += 1
+            # if not np.all(recovered_error == observable_flip):
+            #     py_otf_failed = True
+            #     Pl_py_otf += 1
                 # print('PyOTF failed')
             if not np.all(recovered_error_cpp == observable_flip):
                 cpp_otf_failed = True
@@ -215,29 +215,29 @@ for p in ps:
     print(f"BPOSD results:")
     print(f" * p(e): {pe_bposd}")
     print(f" * p(e)/d: {ped_bposd}")
-    print(f"PyOTF results:")
-    print(f" * p(e): {pe_py_otf}")
-    print(f" * p(e)/d: {ped_py_otf}")
+    # print(f"PyOTF results:")
+    # print(f" * p(e): {pe_py_otf}")
+    # print(f" * p(e)/d: {ped_py_otf}")
     print(f"CppOTF results:")
     print(f" * p(e): {pe_cpp_otf}")
     print(f" * p(e)/d: {ped_cpp_otf}")
     print("")
     print(f"============ Timing results ============")
-    # print(f"BPOSD times:")
-    # print(f" * Average time: {sum_bposd/NMC} s")
-    # print(f" * Worst time: {worst_times[0]} s")
-    # # print(f"PyOTF times:")
-    # # print(f" * Average time: {sum_ton/NMC} s")
-    # # print(f" * Worst time: {worst_times[1]} s")
-    # print(f"CppOTF times:")
-    # print(f" * Average time: {sum_cpp/NMC} s")
-    # print(f" * Worst time: {worst_times[2]} s")
+    print(f"BPOSD times:")
+    print(f" * Average time: {sum_bposd/NMC} s")
+    print(f" * Worst time: {worst_times[0]} s")
+    # print(f"PyOTF times:")
+    # print(f" * Average time: {sum_ton/NMC} s")
+    # print(f" * Worst time: {worst_times[1]} s")
+    print(f"CppOTF times:")
+    print(f" * Average time: {sum_cpp/NMC} s")
+    print(f" * Worst time: {worst_times[2]} s")
 
     # Here I write the results:
     
     with open(name_file_bpbpotf, "a") as file:
         file.write(f"{p}\t\t {ped_cpp_otf} \t\t {pe_cpp_otf} \t\t {number_of_iterations}\n")
 
-    with open(name_file_bposd, "a") as file:
-        file.write(f"{p}\t\t {ped_bposd} \t\t {pe_bposd} \t\t {number_of_iterations}\n")
+    # with open(name_file_bposd, "a") as file:
+    #     file.write(f"{p}\t\t {ped_bposd} \t\t {pe_bposd} \t\t {number_of_iterations}\n")
     # TODO Print error rate, logical error rate, logical error rate / d and number of iterations
