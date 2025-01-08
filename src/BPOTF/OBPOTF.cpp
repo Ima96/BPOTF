@@ -470,7 +470,7 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    // Create BpDecoder to use against the pcm
    m_po_pcm_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_pcm,
                                                 channel_errors,
-                                                1000,//m_u64_pcm_cols,
+                                                30,//m_u64_pcm_cols,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
                                                 1.0, 1,
@@ -480,7 +480,7 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    // Create BpDecoder to use against the phenomenological pcm.
    m_po_phen_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen,
                                                 std::vector<double>(u64_phen_col_num, 1e-14),
-                                                1000,//u64_phen_col_num,
+                                                100,//u64_phen_col_num,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
                                                 1.0, 1,
@@ -490,7 +490,7 @@ void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * 
    // Create BpDecoder to use against the pcm after OTF.
    m_po_otf_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen,
                                                 std::vector<double>(u64_phen_col_num, 1e-14),
-                                                1000,//u64_phen_col_num,
+                                                100,//u64_phen_col_num,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
                                                 1.0, 1,
@@ -784,7 +784,7 @@ std::vector<uint64_t> OBPOTF::otf_uf_probs(OCSC const * const po_csc_mat, std::v
 {
    uint16_t const & csc_rows = po_csc_mat->get_row_num(); // Already accounts for virtual checks
    uint64_t const & csc_cols = po_csc_mat->get_col_num();
-   
+   // std::cout << "Correct decoding!" << std::endl;
    std::vector<uint64_t> columns_chosen;
    columns_chosen.reserve(csc_cols);
 
@@ -801,19 +801,22 @@ std::vector<uint64_t> OBPOTF::otf_uf_probs(OCSC const * const po_csc_mat, std::v
       std::vector<uint8_t> checker(csc_rows, 0);
       std::vector<int> depths = {0, -1, 0};
       bool boolean_condition = true;
-
+      
+      int u64_different_clusters = 0; // I have added this to take into account special cases of l.i. columns
       uint64_t u64_col_sp_sz = column_sp.size();
       for (uint64_t nt_elem_idx = 0UL; nt_elem_idx < u64_col_sp_sz; ++nt_elem_idx)
       {
          int elem_root = clstr_set.find(column_sp[nt_elem_idx]);
          int elem_depth = clstr_set.get_rank(elem_root);
 
-         if (checker[elem_root] == 1U)
+         if (checker[elem_root] == 1U) // This ensures that no column connects to two clusters
          {
             boolean_condition = false;
-            break;
+            continue;
          }
          checker[elem_root] = 1U;
+         u64_different_clusters++;
+
 
          if (elem_depth > depths[1])
          {
@@ -823,9 +826,10 @@ std::vector<uint64_t> OBPOTF::otf_uf_probs(OCSC const * const po_csc_mat, std::v
          {
             depths[2] = 1;
          }
+         // Check the following to the following logic. Only reject a column if all rows bring to the same cluster.
       }
 
-      if (boolean_condition == true)
+      if (boolean_condition == true && u64_different_clusters > 1)
       {
          uint64_t u64_checker_sz = checker.size();
          for(uint64_t elem = 0UL; elem < u64_checker_sz; ++elem)

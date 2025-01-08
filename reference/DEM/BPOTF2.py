@@ -57,7 +57,11 @@ class UFCLN:
         self.H_phen = self.H[:,np.where(columns_to_consider==1)[0]]
         self.obs_phen = self.obs[:,np.where(columns_to_consider==1)[0]]
         
+        print('Overall pcm shape')
         print(self.H.shape)
+        print('Overall pcm_phen shape')
+        print(self.H_phen.shape)
+        print('Transf matrix shape')
         print(conts['transfMat'].shape)
         # self.transf_M = conts['transfMat'].toarray()
         self.transf_M = conts['transfMat']

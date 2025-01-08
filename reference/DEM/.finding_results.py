@@ -66,9 +66,9 @@ else:
 name_file_bpbpotf = f'results/bpbpotf{d}bbcode.txt'
 name_file_bposd = f'results/bposd{d}bbcode.txt'
 ps = [1e-3, 2e-3, 3e-3, 4e-3, 5e-3]
-ps = [ 1e-3, 2e-3]
+ps = [ 1e-3]
 NMC = 10**4
-
+print(f'Code type {BB_TYPE}')
 
 for p in ps:
     print(f'Physical error rate: {p}\n')
@@ -107,6 +107,7 @@ for p in ps:
 
     # while (Pl_bposd < 100) or (Pl_cpp_otf < 100):
     while (Pl_cpp_otf < 100):
+    # while (Pl_bposd < 100):
         print(f'\nNumber of iterations {number_of_iterations}')
         number_of_iterations += NMC
         print(f'Number of bpbpotf failures {Pl_cpp_otf}')
@@ -175,6 +176,7 @@ for p in ps:
             if not np.all(recovered_error_cpp == observable_flip):
                 cpp_otf_failed = True
                 Pl_cpp_otf += 1
+                # print('Outch!')
                 # print('CppOTF failed \n')
                 # print(observable_flip.astype(int))
                 # print(recovered_error)
