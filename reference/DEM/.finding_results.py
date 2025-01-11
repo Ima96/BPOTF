@@ -38,7 +38,7 @@ PRINTING = False
 # obs = conts['obs']
 # hz = conts['hz']
 
-BB_TYPE =  144
+BB_TYPE =  288
 if BB_TYPE == 72:
     # [72, 12, 6] último número es el numero de rondas
     code, A_list, B_list = create_bivariate_bicycle_codes(6, 6, [3], [1,2], [1,2], [3])
@@ -84,12 +84,12 @@ for p in ps:
     sampler = circuit.compile_detector_sampler()
     # myDecoder = UFCLN(dem, d=d)
     bpbpotf_cpp = BPOTF.OBPOTF(dem, p, BPOTF.OBPOTF.NoiseType.E_CLN, transfer_mat.astype('uint8'))
-    # bposd = bposd_decoder(
-    #     bm.check_matrix,
-    #     channel_probs = bm.priors,
-    #     max_iter = 1000,
-    #     osd_method = "osd_0"
-    # )
+    bposd = bposd_decoder(
+        bm.check_matrix,
+        channel_probs = bm.priors,
+        max_iter = 1000,
+        osd_method = "osd_0"
+    )
     process = psutil.Process(os.getpid())
     print(f"Memory used: {process.memory_info().rss / 1024 ** 2:.2f} MB")  # Memory in MB
 
@@ -106,8 +106,8 @@ for p in ps:
     updates = 0
 
     # while (Pl_bposd < 100) or (Pl_cpp_otf < 100):
-    while (Pl_cpp_otf < 100):
-    # while (Pl_bposd < 100):
+    # while (Pl_cpp_otf < 100):
+    while (Pl_bposd < 100):
         print(f'\nNumber of iterations {number_of_iterations}')
         number_of_iterations += NMC
         print(f'Number of bpbpotf failures {Pl_cpp_otf}')
@@ -143,12 +143,12 @@ for p in ps:
             py_otf_time = (stop_ton-start_ton)
             
             # start_cpp = timer()
-            recovered_error_cpp = bpbpotf_cpp.decode(detection_event.astype(np.uint8))
+            # recovered_error_cpp = bpbpotf_cpp.decode(detection_event.astype(np.uint8))
             # stop_cpp = timer()
             # cpp_otf_time = (stop_cpp-start_cpp)
 
             # start_bposd = timer()
-            # recovered_error2 = (bm.observables_matrix @ bposd.decode(detection_event)) %2
+            recovered_error2 = (bm.observables_matrix @ bposd.decode(detection_event)) %2
             # end_bposd = timer()
             # bposd_time = (end_bposd-start_bposd)
 
@@ -165,17 +165,17 @@ for p in ps:
 
             # stages_list.append(stage)
             
-            # if not np.all(recovered_error2 == observable_flip):
-            #     bposd_failed = True
-            #     Pl_bposd += 1
+            if not np.all(recovered_error2 == observable_flip):
+                bposd_failed = True
+                Pl_bposd += 1
                 # print('BPOSD failed')
             # if not np.all(recovered_error == observable_flip):
             #     py_otf_failed = True
             #     Pl_py_otf += 1
                 # print('PyOTF failed')
-            if not np.all(recovered_error_cpp == observable_flip):
-                cpp_otf_failed = True
-                Pl_cpp_otf += 1
+            # if not np.all(recovered_error_cpp == observable_flip):
+            #     cpp_otf_failed = True
+            #     Pl_cpp_otf += 1
                 # print('Outch!')
                 # print('CppOTF failed \n')
                 # print(observable_flip.astype(int))
@@ -237,9 +237,9 @@ for p in ps:
 
     # Here I write the results:
     
-    with open(name_file_bpbpotf, "a") as file:
-        file.write(f"{p}\t\t {ped_cpp_otf} \t\t {pe_cpp_otf} \t\t {number_of_iterations}\n")
+    # with open(name_file_bpbpotf, "a") as file:
+    #     file.write(f"{p}\t\t {ped_cpp_otf} \t\t {pe_cpp_otf} \t\t {number_of_iterations}\n")
 
-    # with open(name_file_bposd, "a") as file:
-    #     file.write(f"{p}\t\t {ped_bposd} \t\t {pe_bposd} \t\t {number_of_iterations}\n")
+    with open(name_file_bposd, "a") as file:
+        file.write(f"{p}\t\t {ped_bposd} \t\t {pe_bposd} \t\t {number_of_iterations}\n")
     # TODO Print error rate, logical error rate, logical error rate / d and number of iterations
