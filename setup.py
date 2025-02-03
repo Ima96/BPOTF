@@ -118,7 +118,7 @@ class CustomInstallCommand(install):
         env['PYTHONPATH'] = self.build_lib + os.pathsep + env.get('PYTHONPATH', '')
         
         stubgen_cmd = ["pybind11-stubgen", 
-                       "--enum-class-locations", "NoiseType:BPOTF.BPOTF.OBPOTF.NoiseType", 
+                       "--enum-class-locations", "NoiseType:BPOTF.BPOTF.NoiseType", 
                        "-o"]
         
         # extdir = os.path.abspath(os.path.dirname(build_ext_cmd.get_ext_fullpath(module_name)))

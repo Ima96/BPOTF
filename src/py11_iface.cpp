@@ -17,6 +17,7 @@
 
 // Custom headers
 #include "BPOTF/OBPOTF.h"
+#include "SDemData/SDemData.h"
 #include "docstrings.h"
 
 namespace py = pybind11;
@@ -36,28 +37,37 @@ PYBIND11_MODULE(BPOTF, mBPOTF) {
    auto py_BPOTF = py::class_<OBPOTF>(mBPOTF, "OBPOTF");
 
    // Export enumeration typedef for different error sources supported
-   py::enum_<OBPOTF::ENoiseType_t>(py_BPOTF, "NoiseType")
-      .value("E_CC", OBPOTF::ENoiseType_t::E_CC, 
+   py::enum_<ENoiseType_t>(mBPOTF, "NoiseType")
+      .value("E_CC", ENoiseType_t::E_CC, 
          R"pbdoc(
             Code Capacity kind of noise.
          )pbdoc")
-      .value("E_PHEN", OBPOTF::ENoiseType_t::E_PHEN, 
+      .value("E_PHEN", ENoiseType_t::E_PHEN, 
          R"pbdoc(
             Phenomenological kind of noise. (No support yet)
          )pbdoc")
-      .value("E_CLN", OBPOTF::ENoiseType_t::E_CLN, 
+      .value("E_CLN", ENoiseType_t::E_CLN, 
          R"pbdoc(
             Circuit-Level-Noise type. Select this to build object from DEMs.
          )pbdoc")
       .export_values();
 
+   // External struct to receive Dem Data from user
+   auto py_DemData = py::class_<SDemData_t>(mBPOTF, "DemData");
+   py_DemData.def(py::init<>());
+   py_DemData.def_readwrite("obs_matrix", &SDemData_t::po_obs_csr_mat);
+   py_DemData.def_readwrite("phen_obs_matrix", &SDemData_t::po_phen_obs_csr);
+   py_DemData.def_readwrite("phen_check_matrix", &SDemData_t::po_phen_pcm_csc);
+   py_DemData.def_readwrite("transfer_matrix", &SDemData_t::po_transfer_csr_mat);
+   py_DemData.def_readwrite("priors", &SDemData_t::af64_priors);
+
    // Export class's public methods.
    py_BPOTF
-      .def(py::init<py::object const &, float const &, OBPOTF::ENoiseType_t const, py::object const * const>(),
+      .def(py::init<py::object const &, float const &, ENoiseType_t const, SDemData_t const *>(),
             py::arg("pcm"),   // Parity-check matrix parameter
             py::arg("p"),     // Physical error probability
-            py::arg("noise_type") = OBPOTF::ENoiseType_t::E_CC,   // Noise model type. Default: E_CC
-            py::arg("transfer_mat") = nullptr,  // Transfer matrix
+            py::arg("noise_type") = ENoiseType_t::E_CC,   // Noise model type. Default: E_CC
+            py::arg("ps_ext_dem_data") = py::none(),  // External DEM data
             docstr_bpotf_constructor
          );
    py_BPOTF.def("otf_uf_probs", py::overload_cast<py::array_t<double, C_FMT> const &>(&OBPOTF::otf_uf_probs));

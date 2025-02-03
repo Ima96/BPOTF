@@ -6,9 +6,7 @@ requires = [
    "cmake>=3.24",
    "pybind11-stubgen",
    # Necessary installations for pip build environment to generate stubs
-   "scipy",
-   "stim",
-   "beliefmatching"
+   "scipy"
 ]
 build-backend = "setuptools.build_meta"
 

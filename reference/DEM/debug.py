@@ -38,7 +38,7 @@ H_phen = conts['Hphen']
 obs = conts['obs']
 hz = conts['hz']
 
-BB_TYPE = 288
+BB_TYPE = 144
 if BB_TYPE == 72:
     # [72, 12, 6] último número es el numero de rondas
     code, A_list, B_list = create_bivariate_bicycle_codes(6, 6, [3], [1,2], [1,2], [3])
@@ -76,7 +76,21 @@ dem = circuit.detector_error_model()
 bm = detector_error_model_to_check_matrices(dem, True)
 sampler = circuit.compile_detector_sampler()
 myDecoder = UFCLN(dem, d=d)
-bpbpotf_cpp = BPOTF.OBPOTF(dem, p, BPOTF.OBPOTF.NoiseType.E_CLN, transfer_mat.astype('uint8'))
+# bpbpotf_cpp = BPOTF.OBPOTF(dem, p, BPOTF.OBPOTF.NoiseType.E_CLN, transfer_mat.astype('uint8'))
+dem_data = BPOTF.DemData()
+dem_data.priors = bm.priors
+dem_data.obs_matrix = bm.observables_matrix.toarray('F').astype(np.uint8)
+# Make the phenomenological matrix
+nonzero_counts = bm.check_matrix.sum(axis=0).A1
+selected_cols = np.where(nonzero_counts <= 3)[0]
+temp = bm.observables_matrix[:, selected_cols]
+dem_data.phen_obs_matrix = temp.toarray('F').astype(np.uint8)
+# Make the observables phenomenological matrix
+temp2 = bm.check_matrix[:, selected_cols]
+dem_data.phen_check_matrix = temp2.toarray('F').astype(np.uint8)
+dem_data.transfer_matrix = transfer_mat.astype(np.uint8)
+
+bpbp_otf_v2 = BPOTF.OBPOTF(bm.check_matrix, p, BPOTF.NoiseType.E_CLN, dem_data)
 bposd = bposd_decoder(
     bm.check_matrix,
     channel_probs = bm.priors,
@@ -117,7 +131,7 @@ for index, detection_event in enumerate(detection_events):
     py_otf_time = (stop_ton-start_ton)
     
     start_cpp = timer()
-    recovered_error_cpp = bpbpotf_cpp.decode(detection_event.astype(np.uint8))
+    recovered_error_cpp = bpbp_otf_v2.decode(detection_event.astype(np.uint8))
     stop_cpp = timer()
     cpp_otf_time = (stop_cpp-start_cpp)
 
@@ -162,9 +176,6 @@ for index, detection_event in enumerate(detection_events):
     if divmod(finished, 10) == (updates, 0):
         updates += 1
         print('Finished processing {} % of all events'.format(int(finished)))
-        process = psutil.Process(os.getpid())
-        print(f"Memory used: {process.memory_info().rss / 1024 ** 2:.2f} MB")  # Memory in MB
-        
 
 if (1 in stages_list) and (2 in stages_list) and (3 in stages_list):
     print("All stages tested!")

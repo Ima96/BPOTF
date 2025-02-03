@@ -24,6 +24,7 @@
 #include <pybind11/numpy.h>
 
 // Custom includes
+#include "SDemData/SDemData.h"
 #include "CSC/OCSC.h"
 #include "CSR/OCSR.h"
 #include "../ldpc_v2_src/bp.hpp"
@@ -37,6 +38,19 @@ namespace py = pybind11;
  *    Public helper functions
  **********************************************************************************************************************/
 void initialize_BPOTF_dependencies(void);
+
+/********************************************************************************************************************
+ * @typedef ENoiseType_t
+ * @brief   This typedef holds the different noise models that can be passed to the decoder. Depending on the type
+ *          passed, the decoder could also use (by input argument or trying to obtaining it) a transference matrix
+ *          to simplify the decoding procedure.
+ *******************************************************************************************************************/
+typedef enum ENoiseType
+{
+   E_CC     = 0,  //!< Code Capacity (Default mode).
+   E_PHEN   = 1,  //!< Phenomenological.
+   E_CLN    = 2   //!< Circuit-level noise.
+} ENoiseType_t;
 
 class OBPOTF
 {
@@ -56,8 +70,11 @@ class OBPOTF
    //! Matrix in Compressed-Sparse-Column format.
    OCSC * m_po_csc_mat = nullptr;
 
-   typedef struct SDemData
+   typedef struct SIDemData
    {
+      //! Variable that indicates if it is possible to perform 2 stage bp.
+      bool m_bp_bp_otf_enable = false;
+
       //! Transfer matrix in case a DEM is provided.
       OCSR * po_transfer_csr_mat = nullptr;
 
@@ -70,17 +87,45 @@ class OBPOTF
       //!< Phenomenological CSC matrix of the observables.
       OCSR * po_phen_obs_csr = nullptr;
 
-     //!< Array of prior probabilities
-     std::vector<double> af64_priors; 
+      //!< Array of prior probabilities
+      std::vector<double> af64_priors;
 
-   } SDemData_t;
+      // Constructors
+      SIDemData() = delete;
 
-   SDemData_t * m_ps_dem_data = nullptr;
+      SIDemData(SDemData_t const * const ps_ext_dem_data);
+
+      // Destructors
+      ~SIDemData() = default;
+
+      private:
+      template<typename T>
+      inline bool check_member(py::object const & po_obj)
+      {
+         bool ret_val = false;
+
+         ret_val = !po_obj.is_none();
+
+         if (true == ret_val)
+         {
+            ret_val = py::isinstance<py::array_t<T>>(po_obj);
+         }
+
+         return ret_val;
+      }
+
+      bool check_members(SDemData_t const * const ps_ext_dem_data);
+
+   } SIDemData_t;
+
+   SIDemData_t * m_ps_dem_data = nullptr;
 
    //! Pointer to the pcm in format for BpDecoder object
    ldpc::bp::BpSparse * m_po_bpsparse_pcm = nullptr;
    //! Pointer to the phenomenological pcm in format for BpDecoder object
-   ldpc::bp::BpSparse * m_po_bpsparse_phen = nullptr;
+   ldpc::bp::BpSparse * m_po_bpsparse_phen_pcm = nullptr;
+   //! Pointer to the bpsparse object used for the post-OTF BpDecoder object.
+   ldpc::bp::BpSparse * m_po_bpsparse_otf = nullptr;
    //! Pointer to BP decoder object to use it against the pcm.
    ldpc::bp::BpDecoder * m_po_pcm_bp = nullptr;
    //! Pointer to BP decoder object to use it against the phenomenological pcm in case there is one.
@@ -100,19 +145,6 @@ class OBPOTF
    public:
 
    /********************************************************************************************************************
-    * @typedef ENoiseType_t
-    * @brief   This typedef holds the different noise models that can be passed to the decoder. Depending on the type
-    *          passed, the decoder could also use (by input argument or trying to obtaining it) a transference matrix
-    *          to simplify the decoding procedure.
-    *******************************************************************************************************************/
-   typedef enum ENoiseType
-   {
-      E_CC     = 0,  //!< Code Capacity (Default mode).
-      E_PHEN   = 1,  //!< Phenomenological.
-      E_CLN    = 2   //!< Circuit-level noise.
-   } ENoiseType_t;
-
-   /********************************************************************************************************************
     * PRIVATE CLASS METHOD DECLARATION
     *******************************************************************************************************************/
    private:
@@ -123,7 +155,9 @@ class OBPOTF
     * 
     * @param pcm[in] Parity-check matrix from which to initialize the members.
     *******************************************************************************************************************/
-   void OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & pcm);
+   void OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & pcm,
+                                 ENoiseType_t const & noise_type,
+                                 SDemData_t const * const ps_ext_dem_data);
    
    /********************************************************************************************************************
     * @brief Sub-routine that is called from the object constructor if it is called with a scipy_csc object. In this 
@@ -131,17 +165,9 @@ class OBPOTF
     * 
     * @param pcm[in] Parity-check matrix from which to initialize the members.
     *******************************************************************************************************************/
-   void OBPOTF_init_from_scipy_csc(py::object const & pcm);
-
-   /********************************************************************************************************************
-    * @brief Sub-routine that is called from the object constructor if this is fed with a stim dem object. In this 
-    *        case, the PCM is extracted from the DEM and a transfer matrix is passed as argument to simplify the 
-    *        decoding process. In case there is no transfer matrix as input, it will try to generate one if possible.
-    * 
-    * @param po_dem[in]          Input DEM object. PCM is extracted from it.
-    * @param po_transfer_mat[in] Input transfer matrix. If it is null, try to generate a new one.
-    *******************************************************************************************************************/
-   void OBPOTF_init_from_dem(py::object const & po_dem, py::object const * const po_transfer_mat);
+   void OBPOTF_init_from_scipy_csc(py::object const & pcm,
+                                    ENoiseType_t const & noise_type,
+                                    SDemData_t const * const ps_ext_dem_data);
 
    /********************************************************************************************************************
     * @brief This routine performs the OTF algorithm using the clasical Unified-Find method.
@@ -205,7 +231,9 @@ class OBPOTF
     * @param syndrome[in]  A python array in c-style format that indicates the syndrome from which recover the error.
     * @return py::array_t<uint8_t> Output python array with the resulting recovered error.
     *******************************************************************************************************************/
-   py::array_t<uint8_t> generic_decode(py::array_t<uint8_t, C_FMT> const & syndrome);
+   py::array_t<uint8_t> bp_otf_cc_decode(py::array_t<uint8_t, C_FMT> const & syndrome);
+
+   py::array_t<uint8_t> bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> const & syndrome);
 
    /********************************************************************************************************************
     * @brief This routine executes the decoding process for circuit-level noise type of errors. It is registered as a 
@@ -215,7 +243,7 @@ class OBPOTF
     * @param syndrome[in]  A python array in c-style format that indicates the syndrome from which recover the error.
     * @return py::array_t<uint8_t> Output python array with the resulting recovered error.
     *******************************************************************************************************************/
-   py::array_t<uint8_t> cln_decode(py::array_t<uint8_t, C_FMT> const & syndrome);
+   py::array_t<uint8_t> bp_bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> const & syndrome);
 
    /********************************************************************************************************************
     * PUBLIC CLASS METHOD DECLARATION
@@ -232,7 +260,7 @@ class OBPOTF
     * @param transfer_mat[in] Transference matrix to try to simplify the decoding process.
     *******************************************************************************************************************/
    OBPOTF(py::object const & pcm, float const & p, ENoiseType_t const noise_type,
-            py::object const * const transfer_mat);
+            SDemData_t const * ps_ext_dem_data);
 
    /********************************************************************************************************************
     * @brief Delete default constructor, to avoid empty objects.

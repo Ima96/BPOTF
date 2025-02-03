@@ -30,6 +30,7 @@ typedef SSIZE_T ssize_t;
 
 // Custom includes
 #include "OBPOTF.h"
+#include "SDemData/SDemData.h"
 #include "DisjointSet/DisjointSet.h"
 #include "CSC/OCSC.h"
 
@@ -60,11 +61,7 @@ std::chrono::nanoseconds::rep vf_duration_ns;
  **********************************************************************************************************************/
 // Global variable that holds scipy.sparse.csc_matrix type 
 py::object vf_scipy_csc_type;
-// Global variable that holds stim.DetectorErrorModel
-py::object vf_stim_dem_type;
-// Global variable that holds detector_error_model_to_check_matrices fuction from beliefmatching
-py::function vf_dem2cm;
-
+// Global constant variable that holds the initial llr value for probability 1e-14
 const double vfc_initial_llr_value = std::log((1.0 - 1e-14) / 1e-14);
 
 /***********************************************************************************************************************
@@ -74,11 +71,6 @@ void initialize_BPOTF_dependencies(void)
 {
    // Import scipy.sparse.csc_matrix from scipy
    vf_scipy_csc_type = py::module_::import("scipy.sparse").attr("csc_matrix");
-   // Import stim.DetectorErrorModel from Stim
-   vf_stim_dem_type = py::module_::import("stim").attr("DetectorErrorModel");
-   // Import beliefmatching.detector_error_model_to_check_matrices from beliefmatching
-   vf_dem2cm = py::reinterpret_borrow<py::function>(
-      py::module_::import("beliefmatching").attr("detector_error_model_to_check_matrices"));
 }
 
 /***********************************************************************************************************************
@@ -229,57 +221,83 @@ inline std::vector<uint8_t> mat_vec_mul(OCSR const & csr_mat, std::vector<uint8_
 /***********************************************************************************************************************
  * CLASS METHODS
  **********************************************************************************************************************/
+OBPOTF::SIDemData::SIDemData(SDemData const * const ps_ext_dem_data)
+{
+   if (this->check_members(ps_ext_dem_data))
+   {
+      this->af64_priors = toVect1D<double>(ps_ext_dem_data->af64_priors);
+      this->po_obs_csr_mat = convert_u8_ndarray_to_csr(ps_ext_dem_data->po_obs_csr_mat);
+
+      if (true == this->m_bp_bp_otf_enable)
+      {
+         this->po_transfer_csr_mat = convert_u8_ndarray_to_csr(ps_ext_dem_data->po_transfer_csr_mat);
+         this->po_phen_pcm_csc = convert_u8_ndarray_to_csc(ps_ext_dem_data->po_phen_pcm_csc);
+         this->po_phen_obs_csr = convert_u8_ndarray_to_csr(ps_ext_dem_data->po_phen_obs_csr);
+      }
+   }
+   else
+   {
+      throw std::runtime_error("Error! Wrong external DEM data passed... Please verify the following conditions:\n"
+                               "  - Priors are of type numpy.array[double]\n"
+                               "  - Rest of the parameters are of type numpy.array[uint8]");
+   }
+}
+
+bool OBPOTF::SIDemData::check_members(SDemData const * const ps_ext_dem_data)
+{
+   bool ret_val = false;
+
+   ret_val = this->check_member<double>(ps_ext_dem_data->af64_priors);
+   ret_val = (ret_val == false) ? ret_val : this->check_member<uint8_t>(ps_ext_dem_data->po_obs_csr_mat);
+
+   // Check rest of values to enable 2 stage bp
+   bool & p_enable_ref = this->m_bp_bp_otf_enable;
+   p_enable_ref = 
+      (ret_val == false) ? ret_val : this->check_member<uint8_t>(ps_ext_dem_data->po_transfer_csr_mat);
+   p_enable_ref = 
+      (p_enable_ref == false) ? p_enable_ref : this->check_member<uint8_t>(ps_ext_dem_data->po_phen_pcm_csc);
+    p_enable_ref = 
+      (p_enable_ref == false) ? p_enable_ref : this->check_member<uint8_t>(ps_ext_dem_data->po_phen_obs_csr);
+
+   return ret_val;
+}
+
 OBPOTF::OBPOTF(py::object const & au8_pcm, float const & p,
                ENoiseType_t const noise_type = E_CC,
-               py::object const * const transfer_mat = nullptr)
+               SDemData_t const * ps_ext_dem_data = nullptr)
                :m_p(p)
 {
    // Initialize depending the py::object instance
    if (true == py::isinstance<py::array_t<uint8_t>>(au8_pcm))
    {
-      this->OBPOTF_init_from_numpy(au8_pcm);
+      this->OBPOTF_init_from_numpy(au8_pcm, noise_type, ps_ext_dem_data);
    }
    else if (true == py::isinstance(au8_pcm, vf_scipy_csc_type))
    {
-     this->OBPOTF_init_from_scipy_csc(au8_pcm);
-   }
-   else if (true == py::isinstance(au8_pcm, vf_stim_dem_type))
-   {
-      this->OBPOTF_init_from_dem(au8_pcm, transfer_mat);
+     this->OBPOTF_init_from_scipy_csc(au8_pcm, noise_type, ps_ext_dem_data);
    }
    else
    {
-      throw std::runtime_error("Input type not supported! Input type must be ndarray of uint8,"
-                               "scipy.sparse.csc_matrix, or stim.DetectorErrorModel...");
+      throw std::runtime_error("Input type not supported! Input type must be ndarray of uint8"
+                               "or scipy.sparse.csc_matrix");
    }
 
-   // Register decoding callback.
-   if (noise_type == E_CC)
-   {
-      this->m_pf_decoding_func = &OBPOTF::generic_decode;
-   }
-   else if (noise_type == E_CLN)
-   {
-      this->m_pf_decoding_func = &OBPOTF::cln_decode;
-   }
-   else
-   {
-      throw std::runtime_error("ERROR! Introduced noise type is not supported!\n"
-                                 "If you would like to include support submit a PR or open an "
-                                 "issue on the repository. Thanks!");
-   }
 }
 
-void OBPOTF::OBPOTF_init_from_scipy_csc(py::object const & au8_pcm)
+void OBPOTF::OBPOTF_init_from_scipy_csc(py::object const & au8_pcm,
+                                          ENoiseType_t const & noise_type,
+                                          SDemData_t const * const ps_ext_dem_data)
 {
    // Convert scipy.sparse.csc_matrix to ndarray of uint8_t
    py::object dense_mat = au8_pcm.attr("toarray")();
    py::array_t<uint8_t, F_FMT> au8_pcm_pyarr = dense_mat.attr("astype")("uint8");
 
-   this->OBPOTF_init_from_numpy(au8_pcm_pyarr);
+   this->OBPOTF_init_from_numpy(au8_pcm_pyarr, noise_type, ps_ext_dem_data);
 }
 
-void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm)
+void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
+                                    ENoiseType_t const & noise_type,
+                                    SDemData_t const * const ps_ext_dem_data)
 {
    py::buffer_info py_pcm_bufinfo = au8_pcm.request();
 
@@ -291,9 +309,6 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm)
    m_u64_pcm_rows = au8_pcm.shape(0L);
    m_u64_pcm_cols = au8_pcm.shape(1L);
 
-   // Form the vector of indexes to be sorted
-   m_au64_index_array = std::vector<uint64_t>(m_u64_pcm_cols);
-   std::iota(m_au64_index_array.begin(), m_au64_index_array.end(), 0UL);
 
    // Span pointer to the pcm python input to be faster
    std::span<uint8_t> const au8_pcm_sp = toSpan2D(au8_pcm);
@@ -301,203 +316,285 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm)
    // Create CSC type object.
    m_po_csc_mat = new OCSC(au8_pcm_sp, m_u64_pcm_rows);
 
+   if (nullptr != ps_ext_dem_data)
+   {
+      m_ps_dem_data = new SIDemData(ps_ext_dem_data);
+   }
+
    // Create BpSparse object
    m_po_bpsparse_pcm = new ldpc::bp::BpSparse(m_u64_pcm_rows, m_u64_pcm_cols);
-
-   // Create BpDecoder to use against the pcm
-   std::vector<double> channel_errors(m_u64_pcm_cols, m_p);
-   m_po_pcm_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_pcm,
-                                                channel_errors,
-                                                m_u64_pcm_cols,
-                                                ldpc::bp::PRODUCT_SUM,
-                                                ldpc::bp::PARALLEL,
-                                                1.0, 1,
-                                                ldpc::bp::NULL_INT_VECTOR,
-                                                0, true, ldpc::bp::SYNDROME);
-
-   // Create BpDecoder to use against the pcm after OTF.
-   m_po_otf_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_pcm,
-                                                std::vector<double>(m_u64_pcm_cols, 1e-14),
-                                                m_u64_pcm_cols,
-                                                ldpc::bp::PRODUCT_SUM,
-                                                ldpc::bp::PARALLEL,
-                                                1.0, 1,
-                                                ldpc::bp::NULL_INT_VECTOR,
-                                                0, true, ldpc::bp::SYNDROME);
 
    // Iterate through the pcm to get the non-trivial row indexes and maximum number of nt per column.
    for (uint64_t u64_c_idx = 0UL; u64_c_idx < m_u64_pcm_cols; ++u64_c_idx)
    {
-      uint16_t u16_count = 0U;
-      std::vector<int64_t> ai64_curr_col;
-      for (uint64_t u64_r_idx = 0UL; u64_r_idx < m_u64_pcm_rows; ++u64_r_idx)
+      uint16_t u16_col_nnz = 0U;
+      std::span<uint64_t> p_cur_col_idxs_sp = m_po_csc_mat->get_col_row_idxs_fast(u64_c_idx);
+      u16_col_nnz = m_po_csc_mat->get_col_nnz(u64_c_idx);
+      for (uint64_t u64_idx = 0UL; u64_idx < u16_col_nnz; ++u64_idx)
       {
-         uint64_t u64_eff_idx = (u64_c_idx * m_u64_pcm_rows) + u64_r_idx;
-         if (au8_pcm_sp[u64_eff_idx] == 1U)
-         {
-            ++u16_count;
-            ai64_curr_col.push_back(u64_r_idx);
-            m_po_bpsparse_pcm->insert_entry(u64_r_idx, u64_c_idx);
-         }
+         uint64_t u64_r_idx = p_cur_col_idxs_sp[u64_idx];
+         m_po_bpsparse_pcm->insert_entry(u64_r_idx, u64_c_idx);
       }
       
-      if (u16_count == 1U)
+      // TODO: Specify to decode CSS codes separately for capacity noise.
+      if ( u16_col_nnz == 1U)
       {
-         // Take advantage of the integer division truncation.
-         if (static_cast<uint64_t>(ai64_curr_col[0]) < m_u64_pcm_rows / 2) 
-         {
-            m_po_csc_mat->add_row_idx(m_u64_pcm_rows, u64_c_idx);
-         }
-         else
-         {
-            m_po_csc_mat->add_row_idx(m_u64_pcm_rows+1, u64_c_idx);
-         }
+         m_po_csc_mat->add_row_idx(m_u64_pcm_rows, u64_c_idx);
+         // // Take advantage of the integer division truncation.
+         // if (p_cur_col_idxs_sp[0] < m_u64_pcm_rows / 2) 
+         // {
+         //    m_po_csc_mat->add_row_idx(m_u64_pcm_rows, u64_c_idx);
+         // }
+         // else
+         // {
+         //    m_po_csc_mat->add_row_idx(m_u64_pcm_rows+1, u64_c_idx);
+         // }
       }
    }
-}
 
-// TODO: Add checks to verify that every sizes and all are correct!
-void OBPOTF::OBPOTF_init_from_dem(py::object const & po_dem, py::object const * const po_transfer_mat)
-{
-   m_ps_dem_data = new SDemData_t;
-
-   if (po_transfer_mat != nullptr)
+   // Register decoding callback and select appropriate variables.
+   std::vector<double> channel_errors_1;
+   std::vector<double> channel_errors_2;
+   if (noise_type == E_CC)
    {
-      if (true == py::isinstance<py::array_t<uint8_t>>(*po_transfer_mat))
+      // Form the vector of indexes to be sorted
+      m_au64_index_array = std::vector<uint64_t>(m_u64_pcm_cols);
+      std::iota(m_au64_index_array.begin(), m_au64_index_array.end(), 0UL);
+      
+      m_po_bpsparse_otf = m_po_bpsparse_pcm;
+      
+      channel_errors_1 = std::vector<double>(m_u64_pcm_cols, m_p);
+      channel_errors_2 = std::vector<double>(m_u64_pcm_cols, 1e-14);
+
+      this->m_pf_decoding_func = &OBPOTF::bp_otf_cc_decode;
+   }
+   else if (noise_type == E_CLN && m_ps_dem_data->m_bp_bp_otf_enable)
+   {
+      uint64_t u64_phen_row_num = m_ps_dem_data->po_phen_pcm_csc->get_row_num();
+      uint64_t u64_phen_col_num = m_ps_dem_data->po_phen_pcm_csc->get_col_num();
+      m_po_bpsparse_phen_pcm = new ldpc::bp::BpSparse(u64_phen_row_num,
+                                                      u64_phen_col_num);
+
+      for (uint64_t u64_c_idx = 0UL; u64_c_idx < u64_phen_col_num; ++u64_c_idx)
       {
-         m_ps_dem_data->po_transfer_csr_mat = convert_u8_ndarray_to_csr(*po_transfer_mat);
+         std::span<uint64_t> p_cur_col_idxs = m_ps_dem_data->po_phen_pcm_csc->get_col_row_idxs_fast(u64_c_idx);
+         for (uint64_t u64_i = 0UL; u64_i < p_cur_col_idxs.size(); ++u64_i)
+         {
+            uint64_t u64_r_idx = p_cur_col_idxs[u64_i];
+            m_po_bpsparse_phen_pcm->insert_entry(u64_r_idx, u64_c_idx);
+         }
       }
-      else if (true == py::isinstance(*po_transfer_mat, vf_scipy_csc_type))
-      {
-         // Convert scipy.sparse.csc_matrix to ndarray of uint8_t
-         py::object o_dense_transfer_mat = (*po_transfer_mat).attr("toarray")();
-         py::array_t<uint8_t, F_FMT> au8_transfer_mat_pyarr = o_dense_transfer_mat.attr("astype")("uint8");
-         m_ps_dem_data->po_transfer_csr_mat = convert_u8_ndarray_to_csr(au8_transfer_mat_pyarr);
-      }
-      else
-      {
-         throw std::runtime_error("The accepted python objects for the transfer matrix"
-                                    " are either ndarray[uint8] or scipy.sparse.csc_matrix!");
-      }
+
+      // Form the vector of indexes to be sorted
+      m_au64_index_array = std::vector<uint64_t>(u64_phen_col_num);
+      std::iota(m_au64_index_array.begin(), m_au64_index_array.end(), 0UL);
+
+      m_po_bpsparse_otf = m_po_bpsparse_phen_pcm;
+      // Create the channel error probabilities vector from the obtained priors.
+      channel_errors_1 = std::vector<double>(m_ps_dem_data->af64_priors.data(), 
+                                             m_ps_dem_data->af64_priors.data()+m_ps_dem_data->af64_priors.size());
+      channel_errors_2 = std::vector<double>(u64_phen_col_num, 1e-14);
+
+      this->m_pf_decoding_func = &OBPOTF::bp_bp_otf_cln_decode;
+   }
+   else if (noise_type == E_CLN)
+   {
+      // Form the vector of indexes to be sorted
+      m_au64_index_array = std::vector<uint64_t>(m_u64_pcm_cols);
+      std::iota(m_au64_index_array.begin(), m_au64_index_array.end(), 0UL);
+
+      m_po_bpsparse_otf = m_po_bpsparse_pcm;
+
+      // Create the channel error probabilities vector from the obtained priors.
+      channel_errors_1 = std::vector<double>(m_ps_dem_data->af64_priors.data(), 
+                                             m_ps_dem_data->af64_priors.data()+m_ps_dem_data->af64_priors.size());
+      channel_errors_2 = std::vector<double>(m_u64_pcm_cols, 1e-14);
+
+      this->m_pf_decoding_func = &OBPOTF::bp_otf_cln_decode;
    }
    else
    {
-      // TODO: Implement a function to try to get the transfer matrix.
-      // For the moment, an exception will be thrown to avoid null pointer access.
-      throw std::runtime_error("A transference matrix must be provided!");
+      throw std::runtime_error("ERROR! Introduced noise type is not supported!\n"
+                                 "If you would like to include support submit a PR or open an "
+                                 "issue on the repository. Thanks!");
    }
-
-   // Maybe add an optional parameter to choose 'allow_undecomposed_hyperedges'?
-   py::object o_py_dem_matrices = vf_dem2cm(po_dem, true);
-   
-   // The function vf_dem2cm returns a custom python object called DemMatrices that consists of 5 
-   // scipy.sparse.csc_matrices, and 1 numpy.ndarray. We want some of them, thus we have to handle them.
-   m_po_csc_mat = 
-      convert_u8_ndarray_to_csc(CONV_2_U8_NDARR(o_py_dem_matrices.attr("check_matrix")));
-
-   m_ps_dem_data->po_obs_csr_mat =
-      convert_u8_ndarray_to_csr(CONV_2_U8_NDARR(o_py_dem_matrices.attr("observables_matrix")));
-
-   m_ps_dem_data->af64_priors = toVect1D<double>(o_py_dem_matrices.attr("priors").attr("astype")("float64"));
-
-   // Store pcm row and col values
-   m_u64_pcm_rows = m_po_csc_mat->get_row_num();
-   m_u64_pcm_cols = m_po_csc_mat->get_col_num();
-
-   // Create objects for the phenomenological matrices and populate them
-   uint64_t u64_obs_csr_rows = m_ps_dem_data->po_obs_csr_mat->get_row_num();
-   std::vector<uint8_t> pu8_expanded_cm_pcm = m_po_csc_mat->expand_to_column_major();
-   std::vector<uint8_t> pu8_expanded_cm_obs = m_ps_dem_data->po_obs_csr_mat->expand_to_column_major();
-   std::vector<uint8_t> pu8_phen_pcm_cm_mat;
-   std::vector<uint8_t> pu8_phen_obs_cm_mat;
-
-   for (uint64_t u64_idx = 0U; u64_idx < m_u64_pcm_cols; ++u64_idx)
-   {
-      uint64_t u64_col_nnz = m_po_csc_mat->get_col_nnz(u64_idx);
-      // The number 3 here is currently fixed to this value because it is being tested for BB codes, in the future it
-      // might be changed an make it dependent on the maximum number of checks for a column in the pcm.
-      // TODO: Change hardcoded 3U to an input parameter
-      if (3U >= u64_col_nnz)
-      {
-         uint8_t const * const pu8_col_ini = pu8_expanded_cm_pcm.data() + (u64_idx*m_u64_pcm_rows);
-         uint8_t const * const pu8_col_end = pu8_col_ini + m_u64_pcm_rows;
-         pu8_phen_pcm_cm_mat.insert(pu8_phen_pcm_cm_mat.end(), pu8_col_ini, pu8_col_end);
-         
-         uint8_t const * const pu8_col_ini_obs = pu8_expanded_cm_obs.data() + (u64_idx*u64_obs_csr_rows);
-         uint8_t const * const pu8_col_end_obs = pu8_col_ini_obs + u64_obs_csr_rows;
-         pu8_phen_obs_cm_mat.insert(pu8_phen_obs_cm_mat.end(), pu8_col_ini_obs, pu8_col_end_obs);
-      }
-   }
-
-   m_ps_dem_data->po_phen_pcm_csc = new OCSC(pu8_phen_pcm_cm_mat, m_u64_pcm_rows);
-   m_ps_dem_data->po_phen_obs_csr = new OCSR(pu8_phen_obs_cm_mat, u64_obs_csr_rows);
-
-   // Create BpSparse objects
-   m_po_bpsparse_pcm = new ldpc::bp::BpSparse(m_u64_pcm_rows, m_u64_pcm_cols, m_po_csc_mat->get_nnz());
-   uint64_t u64_phen_row_num = m_ps_dem_data->po_phen_pcm_csc->get_row_num();
-   uint64_t u64_phen_col_num = m_ps_dem_data->po_phen_pcm_csc->get_col_num();
-   m_po_bpsparse_phen = new ldpc::bp::BpSparse(u64_phen_row_num,
-                                                u64_phen_col_num);
-   // Populate BpSparse objects   
-   for (uint64_t u64_c_idx = 0UL; u64_c_idx < m_u64_pcm_cols; ++u64_c_idx)
-   {
-      std::span<uint64_t> p_cur_col_idxs = m_po_csc_mat->get_col_row_idxs_fast(u64_c_idx);
-      for (uint64_t u64_i = 0UL; u64_i < p_cur_col_idxs.size(); ++u64_i)
-      {
-         uint64_t u64_r_idx = p_cur_col_idxs[u64_i];
-         m_po_bpsparse_pcm->insert_entry(u64_r_idx, u64_c_idx);
-      }
-   }
-
-   for (uint64_t u64_c_idx = 0UL; u64_c_idx < u64_phen_col_num; ++u64_c_idx)
-   {
-      std::span<uint64_t> p_cur_col_idxs = m_ps_dem_data->po_phen_pcm_csc->get_col_row_idxs_fast(u64_c_idx);
-      for (uint64_t u64_i = 0UL; u64_i < p_cur_col_idxs.size(); ++u64_i)
-      {
-         uint64_t u64_r_idx = p_cur_col_idxs[u64_i];
-         m_po_bpsparse_phen->insert_entry(u64_r_idx, u64_c_idx);
-      }
-   }
-   
-   // Form the vector of indexes to be sorted
-   m_au64_index_array = std::vector<uint64_t>(u64_phen_col_num);
-   std::iota(m_au64_index_array.begin(), m_au64_index_array.end(), 0UL);
-
-   // Create the channel error probabilities vector from the obtained priors.
-   std::vector<double> channel_errors(m_ps_dem_data->af64_priors.data(), 
-                                       m_ps_dem_data->af64_priors.data()+m_ps_dem_data->af64_priors.size());
 
    // Create BpDecoder to use against the pcm
    m_po_pcm_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_pcm,
-                                                channel_errors,
-                                                30,//m_u64_pcm_cols,
+                                          channel_errors_1,
+                                          30, // TODO: Make this configurable by user
+                                          ldpc::bp::PRODUCT_SUM,
+                                          ldpc::bp::PARALLEL,
+                                          1.0, 1,
+                                          ldpc::bp::NULL_INT_VECTOR,
+                                          0, true, ldpc::bp::SYNDROME);
+   
+   if (noise_type == E_CLN && m_ps_dem_data->m_bp_bp_otf_enable)
+   {
+      m_po_phen_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen_pcm,
+                                                channel_errors_2,
+                                                100, // TODO: Make this configurable by user
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
                                                 1.0, 1,
                                                 ldpc::bp::NULL_INT_VECTOR,
                                                 0, true, ldpc::bp::SYNDROME);
-
-   // Create BpDecoder to use against the phenomenological pcm.
-   m_po_phen_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen,
-                                                std::vector<double>(u64_phen_col_num, 1e-14),
-                                                100,//u64_phen_col_num,
-                                                ldpc::bp::PRODUCT_SUM,
-                                                ldpc::bp::PARALLEL,
-                                                1.0, 1,
-                                                ldpc::bp::NULL_INT_VECTOR,
-                                                0, true, ldpc::bp::SYNDROME);
+   }
 
    // Create BpDecoder to use against the pcm after OTF.
-   m_po_otf_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen,
-                                                std::vector<double>(u64_phen_col_num, 1e-14),
-                                                100,//u64_phen_col_num,
-                                                ldpc::bp::PRODUCT_SUM,
-                                                ldpc::bp::PARALLEL,
-                                                1.0, 1,
-                                                ldpc::bp::NULL_INT_VECTOR,
-                                                0, true, ldpc::bp::SYNDROME);
+   m_po_otf_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_otf,
+                                          channel_errors_2,
+                                          100, // TODO: Make this configurable by user
+                                          ldpc::bp::PRODUCT_SUM,
+                                          ldpc::bp::PARALLEL,
+                                          1.0, 1,
+                                          ldpc::bp::NULL_INT_VECTOR,
+                                          0, true, ldpc::bp::SYNDROME);
 
 }
+
+// TODO: Add checks to verify that every sizes and all are correct!
+// void OBPOTF::OBPOTF_init_from_dem(py::object const & po_pcm, py::object const * const ps_ext_dem_data)
+// {
+//    m_ps_dem_data = new SDemData_t;
+
+//    if (ps_ext_dem_data != nullptr)
+//    {
+//       if (true == py::isinstance<py::array_t<uint8_t>>(*po_transfer_mat))
+//       {
+//          m_ps_dem_data->po_transfer_csr_mat = convert_u8_ndarray_to_csr(*po_transfer_mat);
+//       }
+//       else if (true == py::isinstance(*po_transfer_mat, vf_scipy_csc_type))
+//       {
+//          // Convert scipy.sparse.csc_matrix to ndarray of uint8_t
+//          py::object o_dense_transfer_mat = (*po_transfer_mat).attr("toarray")();
+//          py::array_t<uint8_t, F_FMT> au8_transfer_mat_pyarr = o_dense_transfer_mat.attr("astype")("uint8");
+//          m_ps_dem_data->po_transfer_csr_mat = convert_u8_ndarray_to_csr(au8_transfer_mat_pyarr);
+//       }
+//       else
+//       {
+//          throw std::runtime_error("The accepted python objects for the transfer matrix"
+//                                     " are either ndarray[uint8] or scipy.sparse.csc_matrix!");
+//       }
+//    }
+//    else
+//    {
+//       // TODO: Implement a function to try to get the transfer matrix.
+//       // For the moment, an exception will be thrown to avoid null pointer access.
+//       throw std::runtime_error("A transference matrix must be provided!");
+//    }
+
+//    // Maybe add an optional parameter to choose 'allow_undecomposed_hyperedges'?
+//    py::object o_py_dem_matrices = vf_dem2cm(po_dem, true);
+   
+//    // The function vf_dem2cm returns a custom python object called DemMatrices that consists of 5 
+//    // scipy.sparse.csc_matrices, and 1 numpy.ndarray. We want some of them, thus we have to handle them.
+//    m_po_csc_mat = 
+//       convert_u8_ndarray_to_csc(CONV_2_U8_NDARR(o_py_dem_matrices.attr("check_matrix")));
+
+//    m_ps_dem_data->po_obs_csr_mat =
+//       convert_u8_ndarray_to_csr(CONV_2_U8_NDARR(o_py_dem_matrices.attr("observables_matrix")));
+
+//    m_ps_dem_data->af64_priors = toVect1D<double>(o_py_dem_matrices.attr("priors").attr("astype")("float64"));
+
+//    // Store pcm row and col values
+//    m_u64_pcm_rows = m_po_csc_mat->get_row_num();
+//    m_u64_pcm_cols = m_po_csc_mat->get_col_num();
+
+//    // Create objects for the phenomenological matrices and populate them
+//    uint64_t u64_obs_csr_rows = m_ps_dem_data->po_obs_csr_mat->get_row_num();
+//    std::vector<uint8_t> pu8_expanded_cm_pcm = m_po_csc_mat->expand_to_column_major();
+//    std::vector<uint8_t> pu8_expanded_cm_obs = m_ps_dem_data->po_obs_csr_mat->expand_to_column_major();
+//    std::vector<uint8_t> pu8_phen_pcm_cm_mat;
+//    std::vector<uint8_t> pu8_phen_obs_cm_mat;
+
+//    for (uint64_t u64_idx = 0U; u64_idx < m_u64_pcm_cols; ++u64_idx)
+//    {
+//       uint64_t u64_col_nnz = m_po_csc_mat->get_col_nnz(u64_idx);
+//       // The number 3 here is currently fixed to this value because it is being tested for BB codes, in the future it
+//       // might be changed an make it dependent on the maximum number of checks for a column in the pcm.
+//       // TODO: Change hardcoded 3U to an input parameter
+//       if (3U >= u64_col_nnz)
+//       {
+//          uint8_t const * const pu8_col_ini = pu8_expanded_cm_pcm.data() + (u64_idx*m_u64_pcm_rows);
+//          uint8_t const * const pu8_col_end = pu8_col_ini + m_u64_pcm_rows;
+//          pu8_phen_pcm_cm_mat.insert(pu8_phen_pcm_cm_mat.end(), pu8_col_ini, pu8_col_end);
+         
+//          uint8_t const * const pu8_col_ini_obs = pu8_expanded_cm_obs.data() + (u64_idx*u64_obs_csr_rows);
+//          uint8_t const * const pu8_col_end_obs = pu8_col_ini_obs + u64_obs_csr_rows;
+//          pu8_phen_obs_cm_mat.insert(pu8_phen_obs_cm_mat.end(), pu8_col_ini_obs, pu8_col_end_obs);
+//       }
+//    }
+
+//    m_ps_dem_data->po_phen_pcm_csc = new OCSC(pu8_phen_pcm_cm_mat, m_u64_pcm_rows);
+//    m_ps_dem_data->po_phen_obs_csr = new OCSR(pu8_phen_obs_cm_mat, u64_obs_csr_rows);
+
+//    // Create BpSparse objects
+//    m_po_bpsparse_pcm = new ldpc::bp::BpSparse(m_u64_pcm_rows, m_u64_pcm_cols, m_po_csc_mat->get_nnz());
+//    uint64_t u64_phen_row_num = m_ps_dem_data->po_phen_pcm_csc->get_row_num();
+//    uint64_t u64_phen_col_num = m_ps_dem_data->po_phen_pcm_csc->get_col_num();
+//    m_po_bpsparse_phen = new ldpc::bp::BpSparse(u64_phen_row_num,
+//                                                 u64_phen_col_num);
+//    // Populate BpSparse objects   
+//    for (uint64_t u64_c_idx = 0UL; u64_c_idx < m_u64_pcm_cols; ++u64_c_idx)
+//    {
+//       std::span<uint64_t> p_cur_col_idxs = m_po_csc_mat->get_col_row_idxs_fast(u64_c_idx);
+//       for (uint64_t u64_i = 0UL; u64_i < p_cur_col_idxs.size(); ++u64_i)
+//       {
+//          uint64_t u64_r_idx = p_cur_col_idxs[u64_i];
+//          m_po_bpsparse_pcm->insert_entry(u64_r_idx, u64_c_idx);
+//       }
+//    }
+
+//    for (uint64_t u64_c_idx = 0UL; u64_c_idx < u64_phen_col_num; ++u64_c_idx)
+//    {
+//       std::span<uint64_t> p_cur_col_idxs = m_ps_dem_data->po_phen_pcm_csc->get_col_row_idxs_fast(u64_c_idx);
+//       for (uint64_t u64_i = 0UL; u64_i < p_cur_col_idxs.size(); ++u64_i)
+//       {
+//          uint64_t u64_r_idx = p_cur_col_idxs[u64_i];
+//          m_po_bpsparse_phen->insert_entry(u64_r_idx, u64_c_idx);
+//       }
+//    }
+   
+//    // Form the vector of indexes to be sorted
+//    m_au64_index_array = std::vector<uint64_t>(u64_phen_col_num);
+//    std::iota(m_au64_index_array.begin(), m_au64_index_array.end(), 0UL);
+
+//    // Create the channel error probabilities vector from the obtained priors.
+//    std::vector<double> channel_errors(m_ps_dem_data->af64_priors.data(), 
+//                                        m_ps_dem_data->af64_priors.data()+m_ps_dem_data->af64_priors.size());
+
+//    // Create BpDecoder to use against the pcm
+//    m_po_pcm_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_pcm,
+//                                                 channel_errors,
+//                                                 30,//m_u64_pcm_cols,
+//                                                 ldpc::bp::PRODUCT_SUM,
+//                                                 ldpc::bp::PARALLEL,
+//                                                 1.0, 1,
+//                                                 ldpc::bp::NULL_INT_VECTOR,
+//                                                 0, true, ldpc::bp::SYNDROME);
+
+//    // Create BpDecoder to use against the phenomenological pcm.
+//    m_po_phen_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen,
+//                                                 std::vector<double>(u64_phen_col_num, 1e-14),
+//                                                 100,//u64_phen_col_num,
+//                                                 ldpc::bp::PRODUCT_SUM,
+//                                                 ldpc::bp::PARALLEL,
+//                                                 1.0, 1,
+//                                                 ldpc::bp::NULL_INT_VECTOR,
+//                                                 0, true, ldpc::bp::SYNDROME);
+
+//    // Create BpDecoder to use against the pcm after OTF.
+//    m_po_otf_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen,
+//                                                 std::vector<double>(u64_phen_col_num, 1e-14),
+//                                                 100,//u64_phen_col_num,
+//                                                 ldpc::bp::PRODUCT_SUM,
+//                                                 ldpc::bp::PARALLEL,
+//                                                 1.0, 1,
+//                                                 ldpc::bp::NULL_INT_VECTOR,
+//                                                 0, true, ldpc::bp::SYNDROME);
+
+// }
 
 /*
  * Debug purposes, eventually could be removed or improved...
@@ -588,7 +685,7 @@ py::array_t<uint8_t> OBPOTF::decode(py::array_t<uint8_t, C_FMT> const & syndrome
    // return std::invoke(this->m_pf_decoding_func, this, syndrome);
 }
 
-py::array_t<uint8_t> OBPOTF::generic_decode(py::array_t<uint8_t, C_FMT> const & syndrome)
+py::array_t<uint8_t> OBPOTF::bp_otf_cc_decode(py::array_t<uint8_t, C_FMT> const & syndrome)
 {
    std::vector<uint8_t> u8_syndrome(syndrome.data(), syndrome.data() + syndrome.size());
    std::vector<uint8_t> u8_recovered_err = m_po_pcm_bp->decode(u8_syndrome);
@@ -603,7 +700,7 @@ py::array_t<uint8_t> OBPOTF::generic_decode(py::array_t<uint8_t, C_FMT> const & 
       std::vector<double> updated_probs(m_u64_pcm_cols, 1e-14);
       uint64_t u64_col_chosen_sz = columns_chosen.size();
       for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
-         updated_probs[columns_chosen[u64_idx]] = m_p;
+         updated_probs[columns_chosen[u64_idx]] = m_p; // TODO: Think about this value
 
       // TODO: change channel probs to initial_logs and test...
       m_po_otf_bp->update_channel_probs(updated_probs);
@@ -613,7 +710,52 @@ py::array_t<uint8_t> OBPOTF::generic_decode(py::array_t<uint8_t, C_FMT> const & 
    return as_pyarray(std::move(u8_recovered_err));
 }
 
-py::array_t<uint8_t> OBPOTF::cln_decode(py::array_t<uint8_t, C_FMT> const & syndrome)
+py::array_t<uint8_t> OBPOTF::bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> const & syndrome)
+{
+   std::vector<uint8_t> vec_u8_res;
+   // First BP stage
+   std::vector<uint8_t> u8_syndrome(syndrome.data(), syndrome.data() + syndrome.size());
+
+   START_CHRONO
+   std::vector<uint8_t> u8_recovered_err = m_po_pcm_bp->decode(u8_syndrome);
+   STOP_CHRONO("First BP Stage decode: ")
+
+   if (false == m_po_pcm_bp->converge)
+   {
+      // OTF stage
+      std::vector<double> vec_f_llrs = m_po_phen_bp->log_prob_ratios;
+      std::vector<double> vec_f_probs = this->get_probs_from_llrs(vec_f_llrs);
+      START_CHRONO
+      // std::vector<uint64_t> columns_chosen = this->otf_uf(m_ps_dem_data->po_phen_pcm_csc, vec_f_llrs);
+      std::vector<uint64_t> columns_chosen = this->otf_uf_probs(m_po_csc_mat, vec_f_probs);
+      STOP_CHRONO("OTF: ")
+
+      // std::vector<double> updated_llrs(m_ps_dem_data->po_phen_pcm_csc->get_col_num() , vfc_initial_llr_value);
+      std::vector<double> updated_llrs(m_po_csc_mat->get_col_num() , 1e-9);
+      uint64_t u64_col_chosen_sz = columns_chosen.size();
+      // std::cout << "CPP OTF column chosen num: " << u64_col_chosen_sz << std::endl;
+      for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
+      {
+         uint64_t u64_col_idx = columns_chosen[u64_idx];
+         // updated_llrs[u64_col_idx] = vec_f_llrs[u64_col_idx];
+         updated_llrs[u64_col_idx] = vec_f_probs[u64_col_idx];
+      }
+      // m_po_otf_bp->initial_log_prob_ratios = updated_llrs;
+      m_po_otf_bp->update_channel_probs(updated_llrs);
+
+      START_CHRONO
+      u8_recovered_err = m_po_otf_bp->decode(u8_syndrome);
+      STOP_CHRONO("OTF stage decode: ")
+   }
+
+   START_CHRONO
+   vec_u8_res = mat_vec_mul(*(m_ps_dem_data->po_obs_csr_mat), u8_recovered_err);
+   STOP_CHRONO("Observables check multiplication: ")
+
+   return as_pyarray(std::move(vec_u8_res));
+}
+
+py::array_t<uint8_t> OBPOTF::bp_bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> const & syndrome)
 {
    std::vector<uint8_t> vec_u8_res;
    // First BP stage
