@@ -337,7 +337,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
       }
       
       // TODO: Specify to decode CSS codes separately for capacity noise.
-      if ( u16_col_nnz == 1U)
+      if (u16_col_nnz == 1U)
       {
          m_po_csc_mat->add_row_idx(m_u64_pcm_rows, u64_c_idx);
          // // Take advantage of the integer division truncation.
@@ -377,11 +377,18 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
 
       for (uint64_t u64_c_idx = 0UL; u64_c_idx < u64_phen_col_num; ++u64_c_idx)
       {
-         std::span<uint64_t> p_cur_col_idxs = m_ps_dem_data->po_phen_pcm_csc->get_col_row_idxs_fast(u64_c_idx);
-         for (uint64_t u64_i = 0UL; u64_i < p_cur_col_idxs.size(); ++u64_i)
+         uint16_t u16_col_nnz = 0U;
+         std::span<uint64_t> p_cur_col_idxs_sp = m_ps_dem_data->po_phen_pcm_csc->get_col_row_idxs_fast(u64_c_idx);
+         u16_col_nnz = m_ps_dem_data->po_phen_pcm_csc->get_col_nnz(u64_c_idx);
+         for (uint64_t u64_i = 0UL; u64_i < p_cur_col_idxs_sp.size(); ++u64_i)
          {
-            uint64_t u64_r_idx = p_cur_col_idxs[u64_i];
+            uint64_t u64_r_idx = p_cur_col_idxs_sp[u64_i];
             m_po_bpsparse_phen_pcm->insert_entry(u64_r_idx, u64_c_idx);
+         }
+
+         if (u16_col_nnz == 1U)
+         {
+            m_ps_dem_data->po_phen_pcm_csc->add_row_idx(u64_phen_row_num, u64_c_idx);
          }
       }
 
@@ -723,7 +730,7 @@ py::array_t<uint8_t> OBPOTF::bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> const
    if (false == m_po_pcm_bp->converge)
    {
       // OTF stage
-      std::vector<double> vec_f_llrs = m_po_phen_bp->log_prob_ratios;
+      std::vector<double> vec_f_llrs = m_po_pcm_bp->log_prob_ratios;
       std::vector<double> vec_f_probs = this->get_probs_from_llrs(vec_f_llrs);
       START_CHRONO
       // std::vector<uint64_t> columns_chosen = this->otf_uf(m_ps_dem_data->po_phen_pcm_csc, vec_f_llrs);
