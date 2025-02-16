@@ -34,6 +34,10 @@ namespace py = pybind11;
 #define C_FMT py::array::c_style
 #define F_FMT py::array::f_style
 
+#define ST1_DEFAULT_MAX_BP 30
+#define ST2_DEFAULT_MAX_BP 100
+#define ST3_DEFAULT_MAX_BP 100
+
 /***********************************************************************************************************************
  *    Public helper functions
  **********************************************************************************************************************/
@@ -69,6 +73,22 @@ class OBPOTF
    // TODO: Rename to specify explicitly that it is the pcm matrix
    //! Matrix in Compressed-Sparse-Column format.
    OCSC * m_po_csc_mat = nullptr;
+
+   typedef struct SIBpMaxIters
+   {
+      int m_pcm_bp_iters = ST1_DEFAULT_MAX_BP;
+
+      int m_phen_bp_iters = ST2_DEFAULT_MAX_BP;
+
+      int m_otf_bp_iters = ST3_DEFAULT_MAX_BP;
+
+      SIBpMaxIters() = default;
+
+      ~SIBpMaxIters() = default;
+
+   } SIBpMaxIters_t;
+
+   SIBpMaxIters_t * m_ps_bp_max_iterations;
 
    typedef struct SIDemData
    {
@@ -157,6 +177,7 @@ class OBPOTF
     *******************************************************************************************************************/
    void OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & pcm,
                                  ENoiseType_t const & noise_type,
+                                 py::object const & po_ext_bp_iters,
                                  SDemData_t const * const ps_ext_dem_data);
    
    /********************************************************************************************************************
@@ -167,6 +188,7 @@ class OBPOTF
     *******************************************************************************************************************/
    void OBPOTF_init_from_scipy_csc(py::object const & pcm,
                                     ENoiseType_t const & noise_type,
+                                    py::object const & po_ext_bp_iters,
                                     SDemData_t const * const ps_ext_dem_data);
 
    /********************************************************************************************************************
@@ -260,6 +282,7 @@ class OBPOTF
     * @param transfer_mat[in] Transference matrix to try to simplify the decoding process.
     *******************************************************************************************************************/
    OBPOTF(py::object const & pcm, float const & p, ENoiseType_t const noise_type,
+            py::object const & ps_ext_bp_iters,
             SDemData_t const * ps_ext_dem_data);
 
    /********************************************************************************************************************
