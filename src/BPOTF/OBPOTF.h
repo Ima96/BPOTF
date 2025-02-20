@@ -153,6 +153,9 @@ class OBPOTF
    //! Pointer to BP decoder in case the OTF is performed and use BP against its result. 
    ldpc::bp::BpDecoder * m_po_otf_bp = nullptr;
 
+   //! Member variable that indicates wether the decoding process has converged or not.
+   bool m_b_converged = 0U;
+
    //! Array that holds indexes from 0 to m_u64_pcm_cols-1 to be sorted.
    std::vector<uint64_t> m_au64_index_array;
 
@@ -318,6 +321,11 @@ class OBPOTF
     * @brief Prints the object's member. Developing purposes and testing.
     *******************************************************************************************************************/
    void print_object(void);
+
+   inline bool has_converged(void)
+   {
+      return m_b_converged;
+   }
 
 #if defined(DEBUG_OBPOTF)
    py::array_t<uint8_t> getPcm(void);

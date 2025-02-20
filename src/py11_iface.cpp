@@ -72,6 +72,7 @@ PYBIND11_MODULE(BPOTF, mBPOTF) {
             docstr_bpotf_constructor
          );
    py_BPOTF.def("decode", &OBPOTF::decode);
+   py_BPOTF.def("has_converged", &OBPOTF::has_converged);
       
 #if defined(DEBUG_OBPOTF)
    py_BPOTF.def("get_pcm", &OBPOTF::getPcm);
