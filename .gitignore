@@ -7,3 +7,7 @@ CMakeFiles/
 CMakeCache.txt
 *.egg-info/
 *.so
+*.txt
+!bpbpotf*.txt
+!bposd*.txt
+*_test

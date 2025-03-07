@@ -91,50 +91,21 @@ This section explains which are the prerequites, how to compile and use the Pyth
 
 ### Prerequisites
 
-The project is compiled using a C++ compiler and must have support for C++20 standard due to some dependencies with it. Some of the latest Debian based systems already have it installed by default, but in case you need to install it, for these type of systems could be done like the following:
+The project has the following dependecies, which some of them are handled by pip/CMake installation processes and do not need to be accounted for. The dependencies are:
 
-```sh
-sudo apt update && sudo apt upgrade
-sudo apt install g++-10
-# May be update the alternatives too
-sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 30
-sudo update-alternatives --config g++ # Select g++-10
-```
-
-Another heavy dependecy is [Pybind11](https://github.com/pybind/pybind11.git), because it is the library used for interfacing C++ with python. The installation of this dependency is necessary only for the manual compiling mode because the rest of the compilation modes takes into account this prerequisite and download it for compilation. It can be obtained like:
-
-```sh
-sudo python3 -m pip install pybind11
-```
-
-If the installation method of CMake is being used, then cmake should be installed in the system with version >=3.24. For Debian based systems, this could be achieved like so:
-
-```sh
-sudo apt update && sudo apt upgrade
-sudo apt install cmake
-```
-
-Finally, the module has a dependency with the python package [ldpc](https://github.com/quantumgizmos/ldpc.git) developed by [Joschka Roffe](https://github.com/quantumgizmos) to used the implemented `bp_decoder` object. This library should be installed when _using_ the compiled BPOTF module. It can be installed as indicated in their Github repository.
+- C++20
+- Pybind11 (automatic download)
+- Cmake (pip installation supports it)
+- [LDPC](https://github.com/quantumgizmos/ldpc.git) (part of its source code is embedded in the module)
+- [BeliefMatching](https://github.com/oscarhiggott/BeliefMatching) (automatic handling with pip)
+- [Stim](https://github.com/quantumlib/Stim) (automatic handling with pip)
+- [SciPy](https://github.com/scipy/scipy) (automatic handling with pip)
 
 ### Installation
 
-Below are the explanations on how to compile the python module to use the BPOTF decoder. There are several installation options ranging from the manual build option that needs more knowledge and control on the dependecies needed to compile the module, to more easy compilation methods as CMake or pip.
+Below are the explanations on how to compile the python module to use the BPOTF decoder. It is highly recommended to use the pip option, while for developing use pip's editable mode and then the CMake option.
 
-NOTE: the installation instructions are presentes for linux systems, but some may also work for other kind of OS.
-
-#### Manual building
-
-This compilation option uses the Makefile located in the root folder of the project. This Makefile can be tunned to modify some configuration parameters as the module name or the output module directory changing the `MODULE_NAME` and `MODULE_DIR` variables. The steps to compile the module with this method are the following:
-
-1. Clone the git repository and navigate to the directory.
-   ```sh
-   git clone https://github.com/Ademartio/BPOTF.git
-   cd BPOTF
-   ```
-2. Once in the root folder of the repository, and the prerequisites necessary for the compilation in this mode are properly installed, the make command should compile and generate a python importable module in the folder `module`:
-   ```sh
-   make
-   ```
+NOTE: the installation instructions are presented for linux systems, but some may also work for other kind of OS.
 
 #### CMake 
 
@@ -156,9 +127,11 @@ The steps to compile the python importable BPOTF module using this method are ex
    make
    ```
 
+When using this method alone, to be able to use the module it must be copied to the virtual environment or import the location of the module directly from the python script.
+
 #### Pip
 
-To compile the python importable module using pip, the only requisite is to have a C++20 compatible compiler and a pip 10+. Currently, only in Debian based systems has been tested this method but the idea is to offer support for Windows environments too. To compile it using this method, the steps indicated below can be followed:
+To compile the python importable module using pip, the only requisite is to have a C++20 compatible compiler and a pip 10+. Currently, Debian based systems and Windows 10 systems with MSVC 17 have been tested with this option. To compile it using this method, the steps indicated below can be followed:
 
 1. Clone the git repository and navigate to the directory.
    ```sh
@@ -168,20 +141,14 @@ To compile the python importable module using pip, the only requisite is to have
 2. (Optional) It is recommended to create a virtual environment to install python packages local to the project.
    ```sh
    python3 -m venv .venv
-   source .venv/bin/activate
+   source .venv/bin/activate # linux
+   .venv\Scripts\activate # Windows
    ```
 3. Execute the following command:
    ```sh
-   python3 -m pip install -U .
+   pip install . # Normal install
+   pip install -e . # Editable mode
    ```
-
-This will generate a `build` folder in which `egg-info` will be placed and the module will be generated inside the `src` folder. Then, this module could be used directly as any other python module:
-
-```Python
-import BPOTF
-```
-
-To install the module in editable mode, just add a `-e` flag in the installation command.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -216,11 +183,13 @@ _bpotf.decode(syndrome.astype(np.int32))
 ## Roadmap
 
 - [x] Add a License to the repo.
-- [ ] Add CSC support.
+- [x] Add CSC support.
 - [x] Add Pip supported installation method.
 - [ ] Add function to calculate an sparsified detector error model and transfer matrix.
-- [ ] Add function to map soft information from detector error model to sparsified detector matrix.
-- [ ] Add BP+BP decoding protocol for circuit-level noise.
+- [x] Add function to map soft information from detector error model to sparsified detector matrix.
+- [x] Add BP+BP decoding protocol for circuit-level noise.
+- [ ] Add OTF function against LLRs (using logarithmic probabilities)
+- [ ] Try to optimize BP decoder
 
 See the [open issues](https://github.com/Ademartio/BPOTF/issues) for a full list of proposed features (and known issues).
 
@@ -260,7 +229,7 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 * _Antonio de Martì_ - [@ton_demarti](https://x.com/ton_demarti) - toni.demarti@gmail.com
 * _Josu Etxezarreta_ - [@katutxakur](https://x.com/katutxakur) - jetxezarreta@unav.es
-* _Imanol Etxezarreta_ - ietxezarretam@gmail.com
+* _Imanol Etxezarreta_ [@ima96.bsky.social](https://bsky.app/profile/ima96.bsky.social) - ietxezarretam@gmail.com
 * _Joschka Roffe_ - [@quantumgizmos](https://x.com/quantumgizmos) - joschka@roffe.eu
 
 
@@ -277,6 +246,9 @@ Thanks to the following amazing projects and webs for the help, tools and inform
 
 * [Pybind11](https://github.com/pybind/pybind11/tree/master)
 * [LDPC python library](https://github.com/quantumgizmos/ldpc.git) - Joschka Roffe
+* [Beliefmatching package](https://github.com/oscarhiggott/BeliefMatching) - Oscar Higgott
+* [Stim](https://github.com/quantumlib/Stim)
+* [SciPy](https://github.com/scipy/scipy)
 * [Best-README-Template](https://github.com/othneildrew/Best-README-Template) - Othneil Drew
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
