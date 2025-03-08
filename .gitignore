@@ -10,4 +10,7 @@ CMakeCache.txt
 *.txt
 !bpbpotf*.txt
 !bposd*.txt
+reference/DEM/SlidingWindowDecoder
 *_test
+reference/DEM/results/bposd
+reference/DEM/results/bpbpotf
