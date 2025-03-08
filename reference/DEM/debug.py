@@ -90,13 +90,12 @@ temp2 = bm.check_matrix[:, selected_cols]
 dem_data.phen_check_matrix = temp2.toarray('F').astype(np.uint8)
 dem_data.transfer_matrix = transfer_mat.astype(np.uint8)
 
-bp_iterations = np.array([35, -1, 800, 400], dtype=np.int32)
+bp_iterations = np.array([35, -1, 800], dtype=np.int32)
 print(type(bp_iterations))
 
 bpbp_otf_v2 = BPOTF.OBPOTF(bm.check_matrix, p, BPOTF.NoiseType.E_CLN,
                            ps_ext_dem_data=dem_data, po_ext_bp_iters=bp_iterations)
 bpbp_otf_v2.print_object()
-exit()
 bposd = bposd_decoder(
     bm.check_matrix,
     channel_probs = bm.priors,
