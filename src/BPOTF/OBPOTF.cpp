@@ -481,7 +481,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
                                           m_ps_bp_max_iterations->m_pcm_bp_iters,
                                           ldpc::bp::PRODUCT_SUM,
                                           ldpc::bp::PARALLEL,
-                                          1.0, 1,
+                                          1.0, 1e-14, 1,
                                           ldpc::bp::NULL_INT_VECTOR,
                                           0, true, ldpc::bp::SYNDROME);
    
@@ -492,7 +492,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
                                                 m_ps_bp_max_iterations->m_phen_bp_iters,
                                                 ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::PARALLEL,
-                                                1.0, 1,
+                                                1.0, 1e-14, 1,
                                                 ldpc::bp::NULL_INT_VECTOR,
                                                 0, true, ldpc::bp::SYNDROME);
    }
@@ -503,7 +503,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
                                           m_ps_bp_max_iterations->m_otf_bp_iters,
                                           ldpc::bp::PRODUCT_SUM,
                                           ldpc::bp::PARALLEL,
-                                          1.0, 1,
+                                          1.0, 1e-14, 1,
                                           ldpc::bp::NULL_INT_VECTOR,
                                           0, true, ldpc::bp::SYNDROME);
 
