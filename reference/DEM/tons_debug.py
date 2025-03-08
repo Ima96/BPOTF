@@ -38,7 +38,7 @@ PRINTING = False
 # obs = conts['obs']
 # hz = conts['hz']
 
-BB_TYPE = 108
+BB_TYPE = 288
 if BB_TYPE == 72:
     # [72, 12, 6] último número es el numero de rondas
     code, A_list, B_list = create_bivariate_bicycle_codes(6, 6, [3], [1,2], [1,2], [3])
@@ -127,11 +127,11 @@ for p in ps:
     worst_times = [0, 0, 0] # In this order, BPOSD, PyOTF, CppOTF
     stages_list = []
     updates = 0
+    number_of_iters = 0
     while min([Pl_bposd, Pl_cpp_otf]) < 100:
         detection_events, observable_flips = sampler.sample(NMC, separate_observables=True)
-        number_of_iters = 0
+        number_of_iters += NMC
         for index, detection_event in enumerate(detection_events):
-            number_of_iters += NMC
             observable_flip = observable_flips[index]
 
             finished = 100 * (index / NMC)
@@ -210,6 +210,7 @@ for p in ps:
         print(f"Simulation data:")
         print(f" - p = {p}")
         print(f" - NMC = {NMC}")
+        print(f" - Number of iterations completed to the moment = {number_of_iters}")
         print(f" - d = {d}")
         print(f"Failures BPOSD = {Pl_bposd}")
         print(f"Failures BPOTF = {Pl_cpp_otf}")

@@ -80,6 +80,7 @@ namespace ldpc {
                BpMethod bp_method = PRODUCT_SUM,
                BpSchedule schedule = PARALLEL,
                double min_sum_scaling_factor = 0.625,
+               double epsilon = 1e-14,
                int omp_threads = 1,
                const std::vector<int> &serial_schedule = NULL_INT_VECTOR,
                // TODO what should be default here? 0 is set but -1 is checked in decode method?
@@ -96,6 +97,7 @@ namespace ldpc {
          this->candidate_syndrome.resize(check_count);
          this->decoding.resize(bit_count);
          this->converge = 0;
+         this->epsilon = epsilon;
          this->omp_thread_count = omp_threads;
          this->random_schedule_seed = random_schedule_seed;
          this->random_schedule_at_every_iteration = random_schedule_at_every_iteration;
@@ -239,6 +241,9 @@ namespace ldpc {
                   {
                      e.check_to_bit_msg *= temp;
                      int message_sign = syndrome[i] != 0u ? -1.0 : 1.0;
+                     // Potential overflow here
+                     // Clamping value to avoid extreme values near -1 or 1
+                     double safe_value = std::clamp(e.check_to_bit_msg,  this->epsilon, 1.0 - this->epsilon);
                      e.check_to_bit_msg =
                         message_sign * std::log((1 + e.check_to_bit_msg) / (1 - e.check_to_bit_msg));
                      temp *= std::tanh(e.bit_to_check_msg / 2);
