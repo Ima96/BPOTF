@@ -38,7 +38,7 @@ PRINTING = False
 # obs = conts['obs']
 # hz = conts['hz']
 
-BB_TYPE = 288
+BB_TYPE = 72
 if BB_TYPE == 72:
     # [72, 12, 6] último número es el numero de rondas
     code, A_list, B_list = create_bivariate_bicycle_codes(6, 6, [3], [1,2], [1,2], [3])
@@ -63,7 +63,7 @@ elif BB_TYPE == 288:
 else:
     raise Exception("No such option!")
 
-ps = [1e-3, 1.5e-3, 2e-3, 3e-3][::-1]
+ps = [1e-3, 1.5e-3, 2e-3, 3e-3]
 NMC = 10**3
 
 for p in ps:
@@ -92,7 +92,7 @@ for p in ps:
     dem_data.phen_check_matrix = temp2.toarray('F').astype(np.uint8)
     dem_data.transfer_matrix = transfer_mat.astype(np.uint8)
 
-    bp_iterations = np.array([[100, i, 400] for i in range(30, 300, 30)], dtype=np.int32)
+    bp_iterations = np.array([[100, i, 400] for i in range(30, 330, 30)], dtype=np.int32)
     print(type(bp_iterations))
 
     bpbp_otf_v2_list = [BPOTF.OBPOTF(bm.check_matrix, p, BPOTF.NoiseType.E_CLN,
@@ -150,6 +150,7 @@ for p in ps:
                 recovered_error_cpp = bpbp_otf_v2_list[i].decode(detection_event.astype(np.uint8))
                 if bpbp_otf_v2_list[i].has_converged():
                     break
+            # recovered_error_cpp = bpbp_otf_v2_list[-1].decode(detection_event.astype(np.uint8))
             # stop_cpp = timer()
             # cpp_otf_time = (stop_cpp-start_cpp)
 
@@ -179,6 +180,7 @@ for p in ps:
             #     py_otf_failed = True
             #     Pl_py_otf += 1
                 # print('PyOTF failed')
+            # if not np.all(recovered_error_cpp == observable_flip) or not bpbp_otf_v2_list[-1].has_converged():
             if not np.all(recovered_error_cpp == observable_flip) or not bpbp_otf_v2_list[i].has_converged():
                 cpp_otf_failed = True
                 Pl_cpp_otf += 1

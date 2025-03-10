@@ -479,7 +479,8 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
    m_po_pcm_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_pcm,
                                           channel_errors_1,
                                           m_ps_bp_max_iterations->m_pcm_bp_iters,
-                                          ldpc::bp::PRODUCT_SUM,
+                                          // ldpc::bp::PRODUCT_SUM,
+                                          ldpc::bp::MINIMUM_SUM,
                                           ldpc::bp::PARALLEL,
                                           1.0, 1e-14, 1,
                                           ldpc::bp::NULL_INT_VECTOR,
@@ -490,7 +491,8 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
       m_po_phen_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_phen_pcm,
                                                 channel_errors_2,
                                                 m_ps_bp_max_iterations->m_phen_bp_iters,
-                                                ldpc::bp::PRODUCT_SUM,
+                                                // ldpc::bp::PRODUCT_SUM,
+                                                ldpc::bp::MINIMUM_SUM,
                                                 ldpc::bp::PARALLEL,
                                                 1.0, 1e-14, 1,
                                                 ldpc::bp::NULL_INT_VECTOR,
@@ -502,6 +504,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
                                           channel_errors_2,
                                           m_ps_bp_max_iterations->m_otf_bp_iters,
                                           ldpc::bp::PRODUCT_SUM,
+                                          // ldpc::bp::MINIMUM_SUM,
                                           ldpc::bp::PARALLEL,
                                           1.0, 1e-14, 1,
                                           ldpc::bp::NULL_INT_VECTOR,
@@ -628,6 +631,13 @@ py::array_t<uint8_t> OBPOTF::bp_bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> co
       START_CHRONO
       std::vector<double> vec_f_mapped_probs = this->propagate(vec_f_llrs);
       STOP_CHRONO("Propagate: ")
+      for (auto &prob : vec_f_mapped_probs) {
+         prob = std::clamp(prob, 1e-40, 1 - 1e-40);
+      }
+      std::cout << "Dimensions of vec_f_mapped_probs: " << vec_f_mapped_probs.size() << std::endl;
+      auto minmax = std::minmax_element(vec_f_mapped_probs.begin(), vec_f_mapped_probs.end());
+      std::cout << "Minimum value in vec_f_mapped_probs: " << *minmax.first << std::endl;
+      std::cout << "Maximum value in vec_f_mapped_probs: " << *minmax.second << std::endl;
 
       // m_po_phen_bp->channel_probabilities = vec_f_mapped_probs;
       m_po_phen_bp->update_channel_probs(vec_f_mapped_probs);
@@ -664,6 +674,7 @@ py::array_t<uint8_t> OBPOTF::bp_bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> co
          u8_recovered_err = m_po_otf_bp->decode(u8_syndrome);
          STOP_CHRONO("Third Stage decode: ")
          m_b_converged = m_po_otf_bp->converge;
+         std::cout << "OTF converged: " << m_b_converged << std::endl;
       }
       
       START_CHRONO
@@ -914,16 +925,16 @@ py::array_t<uint64_t> OBPOTF::otf_uf_probs(py::array_t<double, C_FMT> const & pr
 
 double OBPOTF::compute_probability_from_log(double const & f64_log_val)
 {
-   double f64_res_prob = 1e-14;
+   double f64_res_prob = 1e-40;
 
    f64_res_prob = 1.0 / (1.0 + std::exp(f64_log_val));
-   if (f64_res_prob > (1.0 - 1e-14))
+   if (f64_res_prob > (1.0 - 1e-40))
    {
-      f64_res_prob = 1.0 - 1e-14;
+      f64_res_prob = 1.0 - 1e-40;
    }
-   else if (f64_res_prob < 1e-14)
+   else if (f64_res_prob < 1e-40)
    {
-      f64_res_prob = 1e-14;
+      f64_res_prob = 1e-40;
    }
 
    return f64_res_prob;
