@@ -81,7 +81,8 @@ namespace ldpc {
                int maximum_iterations = 0,
                BpMethod bp_method = PRODUCT_SUM,
                BpSchedule schedule = PARALLEL,
-               double min_sum_scaling_factor = 0.625,
+               // double min_sum_scaling_factor = 0.625,
+               double min_sum_scaling_factor = 1,
                double _epsilon = 1e-40,
                int omp_threads = 1,
                const std::vector<int> &serial_schedule = NULL_INT_VECTOR,
@@ -91,7 +92,8 @@ namespace ldpc {
                BpInputType bp_input_type = AUTO) :
                pcm(parity_check_matrix), channel_probabilities(std::move(channel_probabilities)),
                check_count(pcm.m), bit_count(pcm.n), maximum_iterations(maximum_iterations), bp_method(bp_method),
-               schedule(schedule), ms_scaling_factor(min_sum_scaling_factor),
+               schedule(schedule), 
+               ms_scaling_factor(min_sum_scaling_factor),
                iterations(0) 
       {
          this->initial_log_prob_ratios.resize(bit_count);

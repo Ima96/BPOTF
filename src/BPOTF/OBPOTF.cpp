@@ -482,7 +482,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
                                           // ldpc::bp::PRODUCT_SUM,
                                           ldpc::bp::MINIMUM_SUM,
                                           ldpc::bp::PARALLEL,
-                                          1.0, 1e-14, 1,
+                                          1.0, 1e-40, 1,
                                           ldpc::bp::NULL_INT_VECTOR,
                                           0, true, ldpc::bp::SYNDROME);
    
@@ -494,7 +494,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
                                                 // ldpc::bp::PRODUCT_SUM,
                                                 ldpc::bp::MINIMUM_SUM,
                                                 ldpc::bp::PARALLEL,
-                                                1.0, 1e-14, 1,
+                                                1.0, 1e-40, 1,
                                                 ldpc::bp::NULL_INT_VECTOR,
                                                 0, true, ldpc::bp::SYNDROME);
    }
@@ -506,7 +506,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
                                           ldpc::bp::PRODUCT_SUM,
                                           // ldpc::bp::MINIMUM_SUM,
                                           ldpc::bp::PARALLEL,
-                                          1.0, 1e-14, 1,
+                                          1.0, 1e-40, 1,
                                           ldpc::bp::NULL_INT_VECTOR,
                                           0, true, ldpc::bp::SYNDROME);
 
@@ -634,10 +634,10 @@ py::array_t<uint8_t> OBPOTF::bp_bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> co
       for (auto &prob : vec_f_mapped_probs) {
          prob = std::clamp(prob, 1e-40, 1 - 1e-40);
       }
-      std::cout << "Dimensions of vec_f_mapped_probs: " << vec_f_mapped_probs.size() << std::endl;
-      auto minmax = std::minmax_element(vec_f_mapped_probs.begin(), vec_f_mapped_probs.end());
-      std::cout << "Minimum value in vec_f_mapped_probs: " << *minmax.first << std::endl;
-      std::cout << "Maximum value in vec_f_mapped_probs: " << *minmax.second << std::endl;
+      // std::cout << "Dimensions of vec_f_mapped_probs: " << vec_f_mapped_probs.size() << std::endl;
+      // auto minmax = std::minmax_element(vec_f_mapped_probs.begin(), vec_f_mapped_probs.end());
+      // std::cout << "Minimum value in vec_f_mapped_probs: " << *minmax.first << std::endl;
+      // std::cout << "Maximum value in vec_f_mapped_probs: " << *minmax.second << std::endl;
 
       // m_po_phen_bp->channel_probabilities = vec_f_mapped_probs;
       m_po_phen_bp->update_channel_probs(vec_f_mapped_probs);

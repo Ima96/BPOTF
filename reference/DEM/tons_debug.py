@@ -38,35 +38,37 @@ PRINTING = False
 # obs = conts['obs']
 # hz = conts['hz']
 
-BB_TYPE = 72
-if BB_TYPE == 72:
-    # [72, 12, 6] último número es el numero de rondas
-    code, A_list, B_list = create_bivariate_bicycle_codes(6, 6, [3], [1,2], [1,2], [3])
-    d = 6
-    transfer_mat = sio.loadmat('transfermatrices/transferMatrixcodel6m6.mat')['transfMat']
-elif BB_TYPE == 108:
-    # [108, 8, 10]
-    code, A_list, B_list = create_bivariate_bicycle_codes(9, 6, [3], [1,2], [1,2], [3])
-    d = 10
-    transfer_mat = sio.loadmat('transfermatrices/transferMatrixcodel9m6.mat')['transfMat']
-elif BB_TYPE == 144:
-    # [144, 12, 12]
-    code, A_list, B_list = create_bivariate_bicycle_codes(12, 6, [3], [1,2], [1,2], [3])
-    d = 12
-    transfer_mat = sio.loadmat('transfermatrices/transferMatrixcodel12m6.mat')['transfMat']
-elif BB_TYPE == 288:
-    #  [288, 12, 18]
-    code, A_list, B_list = create_bivariate_bicycle_codes(12, 12, [3], [2,7], [1,2], [3])
-    d = 18
-    # transfer_mat = sio.loadmat('transfermatrices/BB288TransfDemsObs.mat')['transfMat']
-    transfer_mat = csc_matrix(sio.loadmat('transfermatrices/BB288CSC.mat')['transfMat'])
-else:
-    raise Exception("No such option!")
+BB_TYPE = 108
 
-ps = [1e-3, 1.5e-3, 2e-3, 3e-3]
-NMC = 10**3
+
+ps = [1e-3, 1.5e-3, 2e-3, 3e-3][::-1]
+NMC = 10**4
 
 for p in ps:
+    
+    if BB_TYPE == 72:
+        # [72, 12, 6] último número es el numero de rondas
+        code, A_list, B_list = create_bivariate_bicycle_codes(6, 6, [3], [1,2], [1,2], [3])
+        d = 6
+        transfer_mat = sio.loadmat('transfermatrices/transferMatrixcodel6m6.mat')['transfMat']
+    elif BB_TYPE == 108:
+        # [108, 8, 10]
+        code, A_list, B_list = create_bivariate_bicycle_codes(9, 6, [3], [1,2], [1,2], [3])
+        d = 10
+        transfer_mat = sio.loadmat('transfermatrices/transferMatrixcodel9m6.mat')['transfMat']
+    elif BB_TYPE == 144:
+        # [144, 12, 12]
+        code, A_list, B_list = create_bivariate_bicycle_codes(12, 6, [3], [1,2], [1,2], [3])
+        d = 12
+        transfer_mat = sio.loadmat('transfermatrices/transferMatrixcodel12m6.mat')['transfMat']
+    elif BB_TYPE == 288:
+        #  [288, 12, 18]
+        code, A_list, B_list = create_bivariate_bicycle_codes(12, 12, [3], [2,7], [1,2], [3])
+        d = 18
+        # transfer_mat = sio.loadmat('transfermatrices/BB288TransfDemsObs.mat')['transfMat']
+        transfer_mat = csc_matrix(sio.loadmat('transfermatrices/BB288CSC.mat')['transfMat']).toarray('F')
+    else:
+        raise Exception("No such option!")
     print(f"Running for p = {p}")
     circuit = build_circuit(code, A_list, B_list, 
                             p=p, # physical error rate
@@ -92,29 +94,39 @@ for p in ps:
     dem_data.phen_check_matrix = temp2.toarray('F').astype(np.uint8)
     dem_data.transfer_matrix = transfer_mat.astype(np.uint8)
 
-    bp_iterations = np.array([[100, i, 400] for i in range(30, 330, 30)], dtype=np.int32)
-    print(type(bp_iterations))
+    interval_value = d  # You can change this value to your desired interval
+    max_iters_dem = 100
+    max_iters_sparse = 400
+    max_iters_forest = 100
+    
+    # bp_iterations = np.array([[max_iters_dem, i, max_iters_forest] for i in range(40, 401, 40)], dtype=np.int32)
+    # print(type(bp_iterations))
 
-    bpbp_otf_v2_list = [BPOTF.OBPOTF(bm.check_matrix, p, BPOTF.NoiseType.E_CLN,
-                            ps_ext_dem_data=dem_data, po_ext_bp_iters=bp_iterations[i,:]) for i in range(bp_iterations.shape[0])]
+
+    # bpbp_otf_v2_list = [BPOTF.OBPOTF(bm.check_matrix, p, BPOTF.NoiseType.E_CLN,
+    #                         ps_ext_dem_data=dem_data, po_ext_bp_iters=bp_iterations[i,:]) for i in range(bp_iterations.shape[0])]
 
     # bpbp_otf_v2_list = BPOTF.OBPOTF(bm.check_matrix, p, BPOTF.NoiseType.E_CLN,
-    #                            ps_ext_dem_data=dem_data, po_ext_bp_iters=bp_iterations)
-    bpbp_otf_v2_list[0].print_object()
+                            #    ps_ext_dem_data=dem_data, po_ext_bp_iters=bp_iterations[-1])
+    
+    # bpbp_otf_v2_list[0].print_object()
     # exit()
     bposd = bposd_decoder(
         bm.check_matrix,
         channel_probs = bm.priors,
+        bp_method = "min_sum",
         max_iter = 400,
         osd_method = "osd_0"
     )
     process = psutil.Process(os.getpid())
+    del transfer_mat
     print(f"Memory used: {process.memory_info().rss / 1024 ** 2:.2f} MB")  # Memory in MB
 
 
     Pl_bposd = 0
     Pl_py_otf = 0
     Pl_cpp_otf = 0
+
 
     # detection_events = np.concatenate([detection_events, error_case_syndrome])
     # observable_flips = np.concatenate([observable_flips, error_case_observable])
@@ -128,7 +140,7 @@ for p in ps:
     stages_list = []
     updates = 0
     number_of_iters = 0
-    while min([Pl_bposd, Pl_cpp_otf]) < 100:
+    while min([Pl_bposd]) < 100:
         detection_events, observable_flips = sampler.sample(NMC, separate_observables=True)
         number_of_iters += NMC
         for index, detection_event in enumerate(detection_events):
@@ -146,25 +158,25 @@ for p in ps:
             # py_otf_time = (stop_ton-start_ton)
             
             # start_cpp = timer()
-            for i in range(bp_iterations.shape[0]):
-                recovered_error_cpp = bpbp_otf_v2_list[i].decode(detection_event.astype(np.uint8))
-                if bpbp_otf_v2_list[i].has_converged():
-                    break
-            # recovered_error_cpp = bpbp_otf_v2_list[-1].decode(detection_event.astype(np.uint8))
+            # for i in range(bp_iterations.shape[0]):
+            #     recovered_error_cpp = bpbp_otf_v2_list[i].decode(detection_event.astype(np.uint8))
+            #     if bpbp_otf_v2_list[i].has_converged():
+            #         break
+            # recovered_error_cpp = bpbp_otf_v2_list.decode(detection_event.astype(np.uint8))
             # stop_cpp = timer()
             # cpp_otf_time = (stop_cpp-start_cpp)
 
-            start_bposd = timer()
+            # start_bposd = timer()
             recovered_error2 = (bm.observables_matrix @ bposd.decode(detection_event)) %2
-            end_bposd = timer()
-            bposd_time = (end_bposd-start_bposd)
+            # end_bposd = timer()
+            # bposd_time = (end_bposd-start_bposd)
 
             # sum_ton += py_otf_time
             # sum_cpp += cpp_otf_time
             # sum_bposd += bposd_time
 
-            if bposd_time > worst_times[0]:
-                worst_times[0] = bposd_time
+            # if bposd_time > worst_times[0]:
+            #     worst_times[0] = bposd_time
             # if py_otf_time > worst_times[1]:
             #     worst_times[1] = py_otf_time
             # if cpp_otf_time > worst_times[2]:
@@ -180,10 +192,10 @@ for p in ps:
             #     py_otf_failed = True
             #     Pl_py_otf += 1
                 # print('PyOTF failed')
-            # if not np.all(recovered_error_cpp == observable_flip) or not bpbp_otf_v2_list[-1].has_converged():
-            if not np.all(recovered_error_cpp == observable_flip) or not bpbp_otf_v2_list[i].has_converged():
-                cpp_otf_failed = True
-                Pl_cpp_otf += 1
+            # if not np.all(recovered_error_cpp == observable_flip) or not bpbp_otf_v2_list.has_converged():
+            # if not np.all(recovered_error_cpp == observable_flip) or not bpbp_otf_v2_list[i].has_converged():
+            #     cpp_otf_failed = True
+            #     Pl_cpp_otf += 1
                 # print('CppOTF failed')
 
             if ((bposd_failed is True) or (py_otf_failed is True) or (cpp_otf_failed is True)) and PRINTING:
@@ -240,7 +252,7 @@ for p in ps:
         # bposd_file.write(f"p ped_bposd number_of_iters\n")
         bposd_file.write(f"{p} \t\t{ped_bposd} \t\t{number_of_iters}\n")
 
-    with open(bpbpotf_filename, 'a') as bpbpotf_file:
-        # bpbpotf_file.write(f"p ped_cpp_otf number_of_iters\n")
-        bpbpotf_file.write(f"{p} \t\t{ped_cpp_otf} \t\t{number_of_iters}\n")
+    # with open(bpbpotf_filename, 'a') as bpbpotf_file:
+    #     # bpbpotf_file.write(f"p ped_cpp_otf number_of_iters\n")
+    #     bpbpotf_file.write(f"{p} \t\t{ped_cpp_otf} \t\t{number_of_iters}\n")
 
