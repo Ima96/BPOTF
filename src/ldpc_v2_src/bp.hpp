@@ -10,7 +10,6 @@
 #include <chrono>
 #include <stdexcept> // required for std::runtime_error
 #include <set>
-#include <iostream> // Mirar de si quitar
 
 #include "sparse_matrix_base.hpp"
 #include "gf2sparse.hpp"
@@ -70,7 +69,6 @@ namespace ldpc {
       int iterations;
       int omp_thread_count;
       bool converge;
-      double epsilon;
       int random_schedule_seed;
       bool random_schedule_at_every_iteration;
       ldpc::rng::RandomListShuffle<int> rng_list_shuffle;
@@ -83,7 +81,6 @@ namespace ldpc {
                BpSchedule schedule = PARALLEL,
                // double min_sum_scaling_factor = 0.625,
                double min_sum_scaling_factor = 1,
-               double _epsilon = 1e-40,
                int omp_threads = 1,
                const std::vector<int> &serial_schedule = NULL_INT_VECTOR,
                // TODO what should be default here? 0 is set but -1 is checked in decode method?
@@ -92,8 +89,7 @@ namespace ldpc {
                BpInputType bp_input_type = AUTO) :
                pcm(parity_check_matrix), channel_probabilities(std::move(channel_probabilities)),
                check_count(pcm.m), bit_count(pcm.n), maximum_iterations(maximum_iterations), bp_method(bp_method),
-               schedule(schedule), 
-               ms_scaling_factor(min_sum_scaling_factor),
+               schedule(schedule), ms_scaling_factor(min_sum_scaling_factor),
                iterations(0) 
       {
          this->initial_log_prob_ratios.resize(bit_count);
@@ -101,7 +97,6 @@ namespace ldpc {
          this->candidate_syndrome.resize(check_count);
          this->decoding.resize(bit_count);
          this->converge = 0;
-         this->epsilon = _epsilon;
          this->omp_thread_count = omp_threads;
          this->random_schedule_seed = random_schedule_seed;
          this->random_schedule_at_every_iteration = random_schedule_at_every_iteration;
@@ -238,10 +233,6 @@ namespace ldpc {
                   {
                      e.check_to_bit_msg = temp;
                      temp *= std::tanh(e.bit_to_check_msg / 2);
-                      if (std::isnan(temp)) {
-                        temp = std::clamp(temp, this->epsilon, 1 - this->epsilon);
-                        // std::cout << "NaN stage 1. temp: " << temp << ", e.check_to_bit_msg: " << e.check_to_bit_msg << std::endl;
-                      }
                   }
 
                   temp = 1;
@@ -249,19 +240,9 @@ namespace ldpc {
                   {
                      e.check_to_bit_msg *= temp;
                      int message_sign = syndrome[i] != 0u ? -1.0 : 1.0;
-                     // Potential overflow here
-                     // Clamping value to avoid extreme values near -1 or 1
-                      double check_to_bit_msg = std::log((1 + e.check_to_bit_msg) / (1 - e.check_to_bit_msg));
-                      if (std::isnan(check_to_bit_msg)) {
-                        e.check_to_bit_msg = std::clamp(e.check_to_bit_msg, this->epsilon, 1 - this->epsilon);
-                        check_to_bit_msg = std::log((1 + e.check_to_bit_msg) / (1 - e.check_to_bit_msg));
-                        // std::cout << "Not solved!! (1 + e.check_to_bit_msg) / (1 - e.check_to_bit_msg): " 
-                        // << ((1 + e.check_to_bit_msg) / (1 - e.check_to_bit_msg)) << std::endl;
-                        // std::cout << "NaN avoided. e.check_to_bit_msg: " << e.check_to_bit_msg << ", temp: " << temp << std::endl;
-                        // std::cout << "NaN stage 2. e.check_to_bit_msg: " << e.check_to_bit_msg << ", temp: " << temp << std::endl;
-                      }
-                      e.check_to_bit_msg = message_sign * check_to_bit_msg;
-                      temp *= std::tanh(e.bit_to_check_msg / 2);
+                     e.check_to_bit_msg =
+                        message_sign * std::log((1 + e.check_to_bit_msg) / (1 - e.check_to_bit_msg));
+                     temp *= std::tanh(e.bit_to_check_msg / 2);
                   }
                }
             } 
@@ -321,11 +302,7 @@ namespace ldpc {
                {
                   e.bit_to_check_msg = temp;
                   temp += e.check_to_bit_msg;
-                  // if (std::isnan(temp)) {
-                  //     std::cout << "NaN stage 3. temp: " << temp << ", e.bit_to_check_msg: " << e.bit_to_check_msg << ", e.check_to_bit_msg: " << e.check_to_bit_msg << std::endl;
-                  //    // temp = e.bit_to_check_msg;
-                  // }
-                  if(isnan(temp)) temp = e.bit_to_check_msg;
+                  // if(isnan(temp)) temp = e.bit_to_check_msg;
                }
 
                //make hard decision on basis of log probability ratio for bit i
