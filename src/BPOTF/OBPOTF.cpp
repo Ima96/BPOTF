@@ -264,6 +264,7 @@ bool OBPOTF::SIDemData::check_members(SDemData const * const ps_ext_dem_data)
 
 OBPOTF::OBPOTF(py::object const & au8_pcm, float const & p,
                ENoiseType_t const noise_type = E_CC,
+               py::object const & py_otf_mat = py::none(),
                py::object const & ps_ext_bp_iters = py::none(),
                SDemData_t const * ps_ext_dem_data = nullptr)
                :m_p(p)
@@ -271,11 +272,11 @@ OBPOTF::OBPOTF(py::object const & au8_pcm, float const & p,
    // Initialize depending the py::object instance
    if (true == py::isinstance<py::array_t<uint8_t>>(au8_pcm))
    {
-      this->OBPOTF_init_from_numpy(au8_pcm, noise_type, ps_ext_bp_iters, ps_ext_dem_data);
+      this->OBPOTF_init_from_numpy(au8_pcm, noise_type, py_otf_mat, ps_ext_bp_iters, ps_ext_dem_data);
    }
    else if (true == py::isinstance(au8_pcm, vf_scipy_csc_type))
    {
-     this->OBPOTF_init_from_scipy_csc(au8_pcm, noise_type, ps_ext_bp_iters, ps_ext_dem_data);
+     this->OBPOTF_init_from_scipy_csc(au8_pcm, noise_type, py_otf_mat, ps_ext_bp_iters, ps_ext_dem_data);
    }
    else
    {
@@ -287,6 +288,7 @@ OBPOTF::OBPOTF(py::object const & au8_pcm, float const & p,
 
 void OBPOTF::OBPOTF_init_from_scipy_csc(py::object const & au8_pcm,
                                           ENoiseType_t const & noise_type,
+                                          py::object const & py_otf_mat,
                                           py::object const & po_ext_bp_iters,
                                           SDemData_t const * const ps_ext_dem_data)
 {
@@ -294,11 +296,12 @@ void OBPOTF::OBPOTF_init_from_scipy_csc(py::object const & au8_pcm,
    py::object dense_mat = au8_pcm.attr("toarray")();
    py::array_t<uint8_t, F_FMT> au8_pcm_pyarr = dense_mat.attr("astype")("uint8");
 
-   this->OBPOTF_init_from_numpy(au8_pcm_pyarr, noise_type, po_ext_bp_iters, ps_ext_dem_data);
+   this->OBPOTF_init_from_numpy(au8_pcm_pyarr, noise_type, py_otf_mat, po_ext_bp_iters, ps_ext_dem_data);
 }
 
 void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
                                     ENoiseType_t const & noise_type,
+                                    py::object const & py_otf_mat,
                                     py::object const & po_ext_bp_iters,
                                     SDemData_t const * const ps_ext_dem_data)
 {
@@ -312,7 +315,6 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
    m_u64_pcm_rows = au8_pcm.shape(0L);
    m_u64_pcm_cols = au8_pcm.shape(1L);
 
-
    // Span pointer to the pcm python input to be faster
    std::span<uint8_t> const au8_pcm_sp = toSpan2D(au8_pcm);
 
@@ -323,6 +325,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
    {
       m_ps_dem_data = new SIDemData(ps_ext_dem_data);
    }
+
 
    // Create BpSparse object
    m_po_bpsparse_pcm = new ldpc::bp::BpSparse(m_u64_pcm_rows, m_u64_pcm_cols);
@@ -338,21 +341,6 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
          uint64_t u64_r_idx = p_cur_col_idxs_sp[u64_idx];
          m_po_bpsparse_pcm->insert_entry(u64_r_idx, u64_c_idx);
       }
-      
-      // TODO: Specify to decode CSS codes separately for capacity noise.
-      if (u16_col_nnz == 1U)
-      {
-         m_po_csc_mat->add_row_idx(m_u64_pcm_rows, u64_c_idx);
-         // // Take advantage of the integer division truncation.
-         // if (p_cur_col_idxs_sp[0] < m_u64_pcm_rows / 2) 
-         // {
-         //    m_po_csc_mat->add_row_idx(m_u64_pcm_rows, u64_c_idx);
-         // }
-         // else
-         // {
-         //    m_po_csc_mat->add_row_idx(m_u64_pcm_rows+1, u64_c_idx);
-         // }
-      }
    }
 
    // Register decoding callback and select appropriate variables.
@@ -360,6 +348,9 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
    std::vector<double> channel_errors_2;
    if (noise_type == E_CC)
    {
+      // Process the csc matrix in which OTF will be performed
+      this->process_otf_mat(py_otf_mat, *m_po_csc_mat);
+
       // Form the vector of indexes to be sorted
       m_au64_index_array = std::vector<uint64_t>(m_u64_pcm_cols);
       std::iota(m_au64_index_array.begin(), m_au64_index_array.end(), 0UL);
@@ -373,6 +364,9 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
    }
    else if (noise_type == E_CLN && m_ps_dem_data->m_bp_bp_otf_enable)
    {
+      // Process the csc matrix in which OTF will be performed
+      this->process_otf_mat(py_otf_mat, *(m_ps_dem_data->po_phen_pcm_csc));
+
       uint64_t u64_phen_row_num = m_ps_dem_data->po_phen_pcm_csc->get_row_num();
       uint64_t u64_phen_col_num = m_ps_dem_data->po_phen_pcm_csc->get_col_num();
       m_po_bpsparse_phen_pcm = new ldpc::bp::BpSparse(u64_phen_row_num,
@@ -409,6 +403,9 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
    }
    else if (noise_type == E_CLN)
    {
+      // Process the csc matrix in which OTF will be performed
+      this->process_otf_mat(py_otf_mat, *m_po_csc_mat);
+      
       // Form the vector of indexes to be sorted
       m_au64_index_array = std::vector<uint64_t>(m_u64_pcm_cols);
       std::iota(m_au64_index_array.begin(), m_au64_index_array.end(), 0UL);
@@ -512,6 +509,37 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
 
 }
 
+void OBPOTF::process_otf_mat(py::object const & py_otf_mat, OCSC const & po_default_csc)
+{
+   if (true == py_otf_mat.is_none())
+   {
+      m_po_otf_csc_mat = new OCSC(po_default_csc);
+   }
+   else if (true == py::isinstance<py::array_t<uint8_t>>(py_otf_mat))
+   {
+      m_po_otf_csc_mat = convert_u8_ndarray_to_csc(py_otf_mat);
+   }
+   else if (true == py::isinstance(py_otf_mat, vf_scipy_csc_type))
+   {
+      py::object dense_mat = py_otf_mat.attr("toarray")();
+      py::array_t<uint8_t, F_FMT> au8_otf_mat_pyarr = dense_mat.attr("astype")("uint8");
+      m_po_otf_csc_mat = convert_u8_ndarray_to_csc(au8_otf_mat_pyarr);
+   }
+   else
+   {
+      throw std::runtime_error("OTF matrix type is not supported! Valid types are: None, numpy.array[uint8] "
+                                 "or scipy.sparse.csc");
+   }
+
+   if (m_po_otf_csc_mat->get_col_num() != po_default_csc.get_col_num())
+   {
+      std::string error_str = "The introduced OTF matrix must have the same column number as the PCM!\n\t" +
+                                 std::to_string(m_po_csc_mat->get_col_num()) + " (pcm) VS " + 
+                                 std::to_string(m_po_otf_csc_mat->get_col_num()) + " (otf mat)\n";
+      throw std::runtime_error(error_str);
+   }
+}
+
 /*
  * Debug purposes, eventually could be removed or improved...
  */
@@ -549,7 +577,7 @@ py::array_t<uint8_t> OBPOTF::bp_otf_cc_decode(py::array_t<uint8_t, C_FMT> const 
       std::vector<double> llrs = m_po_pcm_bp->log_prob_ratios;
       std::vector<double> vec_f_probs = this->get_probs_from_llrs(llrs);
 
-      std::vector<uint64_t> columns_chosen = this->otf_uf_probs(m_po_csc_mat, vec_f_probs);
+      std::vector<uint64_t> columns_chosen = this->otf_uf_probs(m_po_otf_csc_mat, vec_f_probs);
 
       std::vector<double> updated_probs(m_u64_pcm_cols, 1e-14);
       uint64_t u64_col_chosen_sz = columns_chosen.size();
@@ -583,11 +611,11 @@ py::array_t<uint8_t> OBPOTF::bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> const
       std::vector<double> vec_f_probs = this->get_probs_from_llrs(vec_f_llrs);
       START_CHRONO
       // std::vector<uint64_t> columns_chosen = this->otf_uf(m_ps_dem_data->po_phen_pcm_csc, vec_f_llrs);
-      std::vector<uint64_t> columns_chosen = this->otf_uf_probs(m_po_csc_mat, vec_f_probs);
+      std::vector<uint64_t> columns_chosen = this->otf_uf_probs(m_po_otf_csc_mat, vec_f_probs);
       STOP_CHRONO("OTF: ")
 
       // std::vector<double> updated_llrs(m_ps_dem_data->po_phen_pcm_csc->get_col_num() , vfc_initial_llr_value);
-      std::vector<double> updated_llrs(m_po_csc_mat->get_col_num() , 1e-9);
+      std::vector<double> updated_llrs(m_po_otf_csc_mat->get_col_num() , 1e-9);
       uint64_t u64_col_chosen_sz = columns_chosen.size();
       // std::cout << "CPP OTF column chosen num: " << u64_col_chosen_sz << std::endl;
       for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
@@ -647,11 +675,11 @@ py::array_t<uint8_t> OBPOTF::bp_bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> co
          std::vector<double> vec_f_probs = this->get_probs_from_llrs(vec_f_llrs);
          START_CHRONO
          // std::vector<uint64_t> columns_chosen = this->otf_uf(m_ps_dem_data->po_phen_pcm_csc, vec_f_llrs);
-         std::vector<uint64_t> columns_chosen = this->otf_uf_probs(m_ps_dem_data->po_phen_pcm_csc, vec_f_probs);
+         std::vector<uint64_t> columns_chosen = this->otf_uf_probs(m_po_otf_csc_mat, vec_f_probs);
          STOP_CHRONO("OTF: ")
 
          // std::vector<double> updated_llrs(m_ps_dem_data->po_phen_pcm_csc->get_col_num() , vfc_initial_llr_value);
-         std::vector<double> updated_llrs(m_ps_dem_data->po_phen_pcm_csc->get_col_num() , 1e-9);
+         std::vector<double> updated_llrs(m_po_otf_csc_mat->get_col_num() , 1e-9);
          uint64_t u64_col_chosen_sz = columns_chosen.size();
          // std::cout << "CPP OTF column chosen num: " << u64_col_chosen_sz << std::endl;
          for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
@@ -785,7 +813,7 @@ std::vector<uint64_t> OBPOTF::otf_classical_uf_probs(OCSC const * const po_csc_m
 
 std::vector<uint64_t> OBPOTF::otf_uf_probs(OCSC const * const po_csc_mat, std::vector<double> const & probs)
 {
-   uint16_t const & csc_rows = po_csc_mat->get_row_num(); // Already accounts for virtual checks
+   uint16_t const & csc_rows = po_csc_mat->get_row_num();
    uint64_t const & csc_cols = po_csc_mat->get_col_num();
    
    std::vector<uint64_t> columns_chosen;
@@ -1001,6 +1029,9 @@ OBPOTF::~OBPOTF(void)
 {
    if (nullptr != m_po_csc_mat)
       delete m_po_csc_mat;
+   
+   if (nullptr != m_po_otf_csc_mat)
+      delete m_po_otf_csc_mat;
 
    if (nullptr != m_ps_bp_max_iterations)
       delete m_ps_bp_max_iterations;

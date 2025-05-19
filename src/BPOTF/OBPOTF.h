@@ -74,6 +74,8 @@ class OBPOTF
    //! Matrix in Compressed-Sparse-Column format.
    OCSC * m_po_csc_mat = nullptr;
 
+   OCSC * m_po_otf_csc_mat = nullptr;
+
    typedef struct SIBpMaxIters
    {
       int m_pcm_bp_iters = ST1_DEFAULT_MAX_BP;
@@ -180,6 +182,7 @@ class OBPOTF
     *******************************************************************************************************************/
    void OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & pcm,
                                  ENoiseType_t const & noise_type,
+                                 py::object const & py_otf_mat,
                                  py::object const & po_ext_bp_iters,
                                  SDemData_t const * const ps_ext_dem_data);
    
@@ -191,8 +194,11 @@ class OBPOTF
     *******************************************************************************************************************/
    void OBPOTF_init_from_scipy_csc(py::object const & pcm,
                                     ENoiseType_t const & noise_type,
+                                    py::object const & py_otf_mat,
                                     py::object const & po_ext_bp_iters,
                                     SDemData_t const * const ps_ext_dem_data);
+
+   void process_otf_mat(py::object const & py_otf_mat, OCSC const & po_default_csc);
 
    /********************************************************************************************************************
     * @brief This routine performs the OTF algorithm using the clasical Unified-Find method.
@@ -284,7 +290,9 @@ class OBPOTF
     * @param noise_type[in]   Type of the noise source.
     * @param transfer_mat[in] Transference matrix to try to simplify the decoding process.
     *******************************************************************************************************************/
-   OBPOTF(py::object const & pcm, float const & p, ENoiseType_t const noise_type,
+   OBPOTF(py::object const & pcm, float const & p,
+            ENoiseType_t const noise_type,
+            py::object const & py_otf_mat,
             py::object const & ps_ext_bp_iters,
             SDemData_t const * ps_ext_dem_data);
 
