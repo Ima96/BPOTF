@@ -62,7 +62,7 @@ std::chrono::nanoseconds::rep vf_duration_ns;
 // Global variable that holds scipy.sparse.csc_matrix type 
 py::object vf_scipy_csc_type;
 // Global constant variable that holds the initial llr value for probability 1e-14
-const double vfc_initial_llr_value = std::log((1.0 - 1e-14) / 1e-14);
+const double vfc_initial_llr_value = std::log((1.0 - 1e-80) / 1e-80);
 
 /***********************************************************************************************************************
  * Helper functions
@@ -358,7 +358,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
       m_po_bpsparse_otf = m_po_bpsparse_pcm;
       
       channel_errors_1 = std::vector<double>(m_u64_pcm_cols, m_p);
-      channel_errors_2 = std::vector<double>(m_u64_pcm_cols, 1e-14);
+      channel_errors_2 = std::vector<double>(m_u64_pcm_cols, 1e-80);
 
       this->m_pf_decoding_func = &OBPOTF::bp_otf_cc_decode;
    }
@@ -397,7 +397,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
       // Create the channel error probabilities vector from the obtained priors.
       channel_errors_1 = std::vector<double>(m_ps_dem_data->af64_priors.data(), 
                                              m_ps_dem_data->af64_priors.data()+m_ps_dem_data->af64_priors.size());
-      channel_errors_2 = std::vector<double>(u64_phen_col_num, 1e-14);
+      channel_errors_2 = std::vector<double>(u64_phen_col_num, 1e-80);
 
       this->m_pf_decoding_func = &OBPOTF::bp_bp_otf_cln_decode;
    }
@@ -415,7 +415,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
       // Create the channel error probabilities vector from the obtained priors.
       channel_errors_1 = std::vector<double>(m_ps_dem_data->af64_priors.data(), 
                                              m_ps_dem_data->af64_priors.data()+m_ps_dem_data->af64_priors.size());
-      channel_errors_2 = std::vector<double>(m_u64_pcm_cols, 1e-14);
+      channel_errors_2 = std::vector<double>(m_u64_pcm_cols, 1e-80);
 
       this->m_pf_decoding_func = &OBPOTF::bp_otf_cln_decode;
    }
@@ -500,7 +500,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
    m_po_otf_bp = new ldpc::bp::BpDecoder(*m_po_bpsparse_otf,
                                           channel_errors_2,
                                           m_ps_bp_max_iterations->m_otf_bp_iters,
-                                          ldpc::bp::PRODUCT_SUM,
+                                          ldpc::bp::MINIMUM_SUM,
                                           // ldpc::bp::MINIMUM_SUM,
                                           ldpc::bp::PARALLEL,
                                           1.0, 1,
@@ -579,7 +579,7 @@ py::array_t<uint8_t> OBPOTF::bp_otf_cc_decode(py::array_t<uint8_t, C_FMT> const 
 
       std::vector<uint64_t> columns_chosen = this->otf_uf_probs(m_po_otf_csc_mat, vec_f_probs);
 
-      std::vector<double> updated_probs(m_u64_pcm_cols, 1e-14);
+      std::vector<double> updated_probs(m_u64_pcm_cols, 1e-80);
       uint64_t u64_col_chosen_sz = columns_chosen.size();
       for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
          updated_probs[columns_chosen[u64_idx]] = m_p; // TODO: Think about this value
@@ -946,16 +946,16 @@ py::array_t<uint64_t> OBPOTF::otf_uf_probs(py::array_t<double, C_FMT> const & pr
 
 double OBPOTF::compute_probability_from_log(double const & f64_log_val)
 {
-   double f64_res_prob = 1e-40;
+   double f64_res_prob = 1e-80;
 
    f64_res_prob = 1.0 / (1.0 + std::exp(f64_log_val));
-   if (f64_res_prob > (1.0 - 1e-40))
+   if (f64_res_prob > (1.0 - 1e-80))
    {
-      f64_res_prob = 1.0 - 1e-40;
+      f64_res_prob = 1.0 - 1e-80;
    }
-   else if (f64_res_prob < 1e-40)
+   else if (f64_res_prob < 1e-80)
    {
-      f64_res_prob = 1e-40;
+      f64_res_prob = 1e-80;
    }
 
    return f64_res_prob;
@@ -993,6 +993,14 @@ std::vector<double> OBPOTF::propagate(std::vector<double> const & vec_f_llrs)
       }
 
       vec_f_mapped_probs[u64_row_idx] = 0.5 * (1.0 - f_prod_sum);
+      if (vec_f_mapped_probs[u64_row_idx] > (1.0 - 1e-80))
+      {
+         vec_f_mapped_probs[u64_row_idx] = 1.0 - 1e-80;
+      }
+      else if (vec_f_mapped_probs[u64_row_idx] < 1e-80)
+      {
+         vec_f_mapped_probs[u64_row_idx] = 1e-80;
+      }
    }
 
    return vec_f_mapped_probs;
