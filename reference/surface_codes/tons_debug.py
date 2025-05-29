@@ -3,10 +3,11 @@ import stim
 import numpy as np
 import BPOTF
 import pymatching
-
+from parser import parser
 import stim
 import numpy as np
 from beliefmatching import BeliefMatching
+import parser
 
 NMC = 1000
 d = 11
@@ -32,6 +33,9 @@ for p in ps:
     dem = circuit.detector_error_model(decompose_errors=True)
     bm = detector_error_model_to_check_matrices(dem, allow_undecomposed_hyperedges=False)
     
+    
+    otf_matrix = parser(circuit, bm.edge_check_matrix)   # Esta es la matriz de paridad con checks virtuales para x y z checks.
+    
     dem_data = BPOTF.DemData()
     dem_data.priors = bm.priors
     dem_data.obs_matrix = bm.observables_matrix.toarray('F').astype(np.uint8)
@@ -44,8 +48,13 @@ for p in ps:
 
 
     # Decoders being considered
-    bpotf = BPOTF.OBPOTF(bm.check_matrix.toarray(), p, BPOTF.NoiseType.E_CLN,
-                            ps_ext_dem_data=dem_data, po_ext_bp_iters= bp_iters_bpbpotf)
+    bpotf = BPOTF.OBPOTF(
+        bm.check_matrix.toarray(), 
+        p, 
+        BPOTF.NoiseType.E_CLN,
+        ps_ext_dem_data=dem_data, 
+        po_ext_bp_iters= bp_iters_bpbpotf
+        )
     
     bm = BeliefMatching(circuit, max_bp_iters=bp_iters)
     pm = pymatching.Matching.from_detector_error_model(dem)
