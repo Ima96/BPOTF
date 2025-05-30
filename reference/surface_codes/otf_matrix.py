@@ -1,6 +1,6 @@
 import numpy as np
 
-def parser(circuit, parity_check_matrix):
+def otf_matrix_computer(circuit, parity_check_matrix):
     """ This function should input the detector error model of a surface code and return a matrix desired for OTF computation. The arguments which are inputted are a circuit which produces 
     the syndrome extraction for the surface code and the parity check matrix of the code.
     circuit: is the stim circuit for the surface code.
