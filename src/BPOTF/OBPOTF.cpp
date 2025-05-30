@@ -695,7 +695,7 @@ py::array_t<uint8_t> OBPOTF::bp_bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> co
          u8_recovered_err = m_po_otf_bp->decode(u8_syndrome);
          STOP_CHRONO("Third Stage decode: ")
          m_b_converged = m_po_otf_bp->converge;
-         std::cout << "OTF converged: " << m_b_converged << std::endl;
+         // std::cout << "OTF converged: " << m_b_converged << std::endl;
       }
       
       START_CHRONO
