@@ -679,7 +679,7 @@ py::array_t<uint8_t> OBPOTF::bp_bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> co
          STOP_CHRONO("OTF: ")
 
          // std::vector<double> updated_llrs(m_ps_dem_data->po_phen_pcm_csc->get_col_num() , vfc_initial_llr_value);
-         std::vector<double> updated_llrs(m_po_otf_csc_mat->get_col_num() , 1e-9);
+         std::vector<double> updated_llrs(m_po_otf_csc_mat->get_col_num() , 0);
          uint64_t u64_col_chosen_sz = columns_chosen.size();
          // std::cout << "CPP OTF column chosen num: " << u64_col_chosen_sz << std::endl;
          for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)

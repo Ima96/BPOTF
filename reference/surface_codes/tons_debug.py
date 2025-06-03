@@ -11,9 +11,9 @@ import scipy.sparse
 
 NMC = 1000
 d = 5
-ps = [1e-3, 2.5e-3, 5e-3, 7.5e-3, 1e-2]
+ps = [5e-3, 6e-3, 7e-3,  8e-3, 9e-3, 1e-2, 1.1e-3, 1.2e-2, 1.3e-2, 1.4e-2, 1.5e-2][::-1]
 bp_iters = 1000
-bp_iters_bpbpotf = np.array([bp_iters, bp_iters, 100])
+bp_iters_bpbpotf = np.array([bp_iters, bp_iters, 100], dtype = np.int32)
 
 for p in ps:
     circuit = stim.Circuit.generated(
@@ -34,7 +34,7 @@ for p in ps:
     bm = detector_error_model_to_check_matrices(dem, allow_undecomposed_hyperedges=False)
     
     
-    otf_matrix = otf_matrix_computer(circuit, bm.edge_check_matrix.toarray('F').astype(np.uint8)).astype(np.uint8)  # Esta es la matriz de paridad con checks virtuales para x y z checks.
+    otf_matrix = otf_matrix_computer(circuit, bm.edge_check_matrix.toarray('F').astype(np.uint8), d).astype(np.uint8)  # Esta es la matriz de paridad con checks virtuales para x y z checks.
     
     dem_data = BPOTF.DemData()
     dem_data.priors = bm.priors
@@ -68,33 +68,42 @@ for p in ps:
     while min([Pl_bpbpotf, Pl_pymatching, Pl_beliefmatching]) < 100:
         shots, observables = sampler.sample(NMC, separate_observables=True)
         number_of_iters += NMC
+        
+        predicted_observables = pm.decode_batch(shots)
+        num_errors = np.sum(np.any(predicted_observables != observables, axis=1))
+        Pl_pymatching += num_errors
+        
+        predicted_observables = bm.decode_batch(shots)
+        num_errors = np.sum(np.any(predicted_observables != observables, axis=1))
+        Pl_beliefmatching += num_errors
+        
         for index, shot in enumerate(shots):
             corrected = True
-            match_recovery = pm.decode(shot)
+            # match_recovery = pm.decode(shot)
             bpbp_otf_recovery = bpotf.decode(shot)
-            bm_recovery = bm.decode(shot)
+            # bm_recovery = bm.decode(shot)
             
-            if not np.all(match_recovery == observables[index]):
-                Pl_pymatching += 1
-                corrected = False
+            # if not np.all(match_recovery == observables[index]):
+            #     Pl_pymatching += 1
+            #     corrected = False
             
             if not np.all(bpbp_otf_recovery == observables[index]) or not bpotf.has_converged():
                 Pl_bpbpotf += 1
                 corrected = False
                 
-            if not np.all(bm_recovery == observables[index]):
-                Pl_beliefmatching += 1
-                corrected = False
+            # if not np.all(bm_recovery == observables[index]):
+            #     Pl_beliefmatching += 1
+            #     corrected = False
             
-            if not corrected:
-                print(f'Number of iters {number_of_iters}')
-                print(f'MWPM error numbers {Pl_pymatching}')
-                print(f"MWPM Error rate = {Pl_pymatching/number_of_iters}")
-                print(f'BPBPOTF error numbers {Pl_bpbpotf}')
-                print(f"BPBPOTF Error rate = {Pl_bpbpotf/number_of_iters}")
-                print(f'BM error numbers {Pl_beliefmatching}')
-                print(f"BM Error rate = {Pl_beliefmatching/number_of_iters}")
-                print('\n')
+            # if not corrected:
+        print(f'Number of iters {number_of_iters}')
+        print(f'MWPM error numbers {Pl_pymatching}')
+        print(f"MWPM Error rate = {Pl_pymatching/number_of_iters}")
+        print(f'BPBPOTF error numbers {Pl_bpbpotf}')
+        print(f"BPBPOTF Error rate = {Pl_bpbpotf/number_of_iters}")
+        print(f'BM error numbers {Pl_beliefmatching}')
+        print(f"BM Error rate = {Pl_beliefmatching/number_of_iters}")
+        print('\n')
                 
     # Save results to separate files for each decoding process
     with open(f"results/bpbpotf_d{d}.txt", "a") as bpbpotf_file:
