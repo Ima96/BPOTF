@@ -38,6 +38,7 @@ def otf_matrix_computer(circuit, parity_check_matrix, extraction_rounds):
             negative_value = int(rec_index)
             if numbers_2[negative_value] in zchecks:
                 true_indices = True
+            break
     
     
     if true_indices:
@@ -45,12 +46,12 @@ def otf_matrix_computer(circuit, parity_check_matrix, extraction_rounds):
         significant_checks[-len(zchecks):] = True
         for round in range(extraction_rounds - 1):
             for index,number in enumerate(numbers_2):
-                if number in zchecks:
+                if number not in zchecks:
                     significant_checks[len(zchecks) + round * (len(numbers_2)) + index] = True
     else:
         for round in range(extraction_rounds - 1):
             for index,number in enumerate(numbers_2):
-                if number not in zchecks:
+                if number in zchecks:
                     significant_checks[len(zchecks) + round * (len(numbers_2)) + index] = True
     
 
