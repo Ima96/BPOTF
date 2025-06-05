@@ -681,13 +681,39 @@ py::array_t<uint8_t> OBPOTF::bp_bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> co
          // std::vector<double> updated_llrs(m_ps_dem_data->po_phen_pcm_csc->get_col_num() , vfc_initial_llr_value);
          std::vector<double> updated_llrs(m_po_otf_csc_mat->get_col_num() , 0);
          uint64_t u64_col_chosen_sz = columns_chosen.size();
-         // std::cout << "CPP OTF column chosen num: " << u64_col_chosen_sz << std::endl;
+         std::cout << "CPP OTF column chosen num: " << u64_col_chosen_sz << std::endl;
          for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
          {
             uint64_t u64_col_idx = columns_chosen[u64_idx];
-            // updated_llrs[u64_col_idx] = vec_f_llrs[u64_col_idx];
-            updated_llrs[u64_col_idx] = vec_f_probs[u64_col_idx];
+            // updated_llrs[u64_col_idx] = vec_f_mapped_probs[u64_col_idx];
+            if (vec_f_probs[u64_col_idx] == 1.0) {
+               updated_llrs[u64_col_idx] = 1.0 - 1e-9;
+            } else {
+               updated_llrs[u64_col_idx] = vec_f_probs[u64_col_idx];
+            }
+            
          }
+         
+         //// TO DELETE
+         std::cout << std::setprecision(20);
+          // Print the three lowest and three largest values of updated_llrs[u64_col_idx]
+          std::vector<double> nonzero_llrs;
+          for (auto val : updated_llrs) {
+            if (val != 0) nonzero_llrs.push_back(val);
+          }
+          if (!nonzero_llrs.empty()) {
+            std::sort(nonzero_llrs.begin(), nonzero_llrs.end());
+            std::cout << "Three lowest updated_llrs: ";
+            for (size_t i = 0; i < std::min<size_t>(3, nonzero_llrs.size()); ++i)
+               std::cout << nonzero_llrs[i] << " ";
+            std::cout << std::endl;
+            std::cout << "Three largest updated_llrs: ";
+            for (size_t i = 0; i < std::min<size_t>(3, nonzero_llrs.size()); ++i)
+               std::cout << nonzero_llrs[nonzero_llrs.size() - 1 - i] << " ";
+            std::cout << std::endl;
+          }
+
+          ////
          // m_po_otf_bp->initial_log_prob_ratios = updated_llrs;
          m_po_otf_bp->update_channel_probs(updated_llrs);
 
