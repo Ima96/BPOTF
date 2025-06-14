@@ -2,7 +2,8 @@ import pathlib
 import numpy as np
 import sinter
 import stim
-from BPOTF import OBPOTF, NoiseType
+from BPOTF import OBPOTF, NoiseType, DemData
+from beliefmatching import detector_error_model_to_check_matrices
 
 from ldpc.ckt_noise.dem_matrices import detector_error_model_to_check_matrices
 
@@ -17,7 +18,10 @@ class SinterBpOtfDecoder(sinter.Decoder):
             noise_type = NoiseType.E_CLN,
             po_otf_csc_mat = None,
             po_ext_bp_iters = None,
-            ps_ext_dem_data = None
+            ps_ext_dem_data = None,
+            transfer_matrix = None,
+            otf_matrix = None,
+            phen_check_matrix = None
             ):
         
         self.m_p = p
@@ -25,6 +29,9 @@ class SinterBpOtfDecoder(sinter.Decoder):
         self.m_po_otf_csc_mat = po_otf_csc_mat
         self.m_po_ext_bp_iters = po_ext_bp_iters
         self.m_ps_ext_dem_data = ps_ext_dem_data
+        self.dem_data_phen_check_matrix = phen_check_matrix
+        self.transfer_matrix = transfer_matrix
+        self.otf_matrix = otf_matrix
 
     def decode_via_files(
             self,
@@ -41,6 +48,18 @@ class SinterBpOtfDecoder(sinter.Decoder):
         self.m_dem = stim.DetectorErrorModel.from_file(dem_path)
         self.m_matrices = detector_error_model_to_check_matrices(self.m_dem, allow_undecomposed_hyperedges=True)
         self.m_pcm = self.m_matrices.check_matrix
+
+
+        dem_data = DemData()
+        bm = detector_error_model_to_check_matrices(self.m_dem, allow_undecomposed_hyperedges = True)
+        dem_data.priors = bm.priors
+        dem_data.obs_matrix = bm.observables_matrix.toarray('F').astype(np.uint8)
+
+
+        dem_data.phen_obs_matrix = bm.edge_observables_matrix.toarray('F').astype(np.uint8)
+            # Make the observables phenomenological matrix
+        dem_data.phen_check_matrix = self.dem_data_phen_check_matrix
+        dem_data.transfer_matrix = self.transfer_matrix
 
         self.bpotf = OBPOTF(
             self.m_pcm,
