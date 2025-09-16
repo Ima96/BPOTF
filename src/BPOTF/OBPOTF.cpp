@@ -291,7 +291,8 @@ void OBPOTF::OBPOTF_init_from_scipy_csc(py::object const & au8_pcm,
                                           ENoiseType_t const & noise_type,
                                           py::object const & py_otf_mat,
                                           py::object const & po_ext_bp_iters,
-                                          SDemData_t const * const ps_ext_dem_data)
+                                          SDemData_t const * const ps_ext_dem_data,
+                                          double const & decimation)
 {
    // Convert scipy.sparse.csc_matrix to ndarray of uint8_t
    py::object dense_mat = au8_pcm.attr("toarray")();
