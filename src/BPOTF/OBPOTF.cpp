@@ -266,8 +266,9 @@ OBPOTF::OBPOTF(py::object const & au8_pcm, float const & p,
                ENoiseType_t const noise_type = E_CC,
                py::object const & py_otf_mat = py::none(),
                py::object const & ps_ext_bp_iters = py::none(),
-               SDemData_t const * ps_ext_dem_data = nullptr)
-               :m_p(p)
+               SDemData_t const * ps_ext_dem_data = nullptr,
+               double decimation)
+               :m_p(p),m_f64_decimation(decimation)
 {
    // Initialize depending the py::object instance
    if (true == py::isinstance<py::array_t<uint8_t>>(au8_pcm))
@@ -303,7 +304,8 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
                                     ENoiseType_t const & noise_type,
                                     py::object const & py_otf_mat,
                                     py::object const & po_ext_bp_iters,
-                                    SDemData_t const * const ps_ext_dem_data)
+                                    SDemData_t const * const ps_ext_dem_data,
+                                    double const & decimation)
 {
    py::buffer_info py_pcm_bufinfo = au8_pcm.request();
 

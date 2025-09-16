@@ -69,6 +69,8 @@ class OBPOTF
    uint64_t m_u64_pcm_rows;
    //! Parity check matrix number of columns.
    uint64_t m_u64_pcm_cols;
+   //! Decimation attribute for the columns not selected in the OTF, defaults to 1e-9
+   double m_f64_decimation = 1e-9;
 
    // TODO: Rename to specify explicitly that it is the pcm matrix
    //! Matrix in Compressed-Sparse-Column format.
@@ -179,24 +181,28 @@ class OBPOTF
     *        the object members from input parameters and executes necessary pre-processings.
     * 
     * @param pcm[in] Parity-check matrix from which to initialize the members.
+    * @param decimation[in] The decimation value for the non-chosen columns after OTF.
     *******************************************************************************************************************/
    void OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & pcm,
                                  ENoiseType_t const & noise_type,
                                  py::object const & py_otf_mat,
                                  py::object const & po_ext_bp_iters,
-                                 SDemData_t const * const ps_ext_dem_data);
+                                 SDemData_t const * const ps_ext_dem_data,
+                                 double const & decimation);
    
    /********************************************************************************************************************
     * @brief Sub-routine that is called from the object constructor if it is called with a scipy_csc object. In this 
     *        case, the object is converted to a pyarray and the the OBPOTF_init_from_numpy is called with it. 
     * 
     * @param pcm[in] Parity-check matrix from which to initialize the members.
+    * @param decimation[in] The decimation value for the non-chosen columns after OTF.
     *******************************************************************************************************************/
    void OBPOTF_init_from_scipy_csc(py::object const & pcm,
                                     ENoiseType_t const & noise_type,
                                     py::object const & py_otf_mat,
                                     py::object const & po_ext_bp_iters,
-                                    SDemData_t const * const ps_ext_dem_data);
+                                    SDemData_t const * const ps_ext_dem_data,
+                                    double const & decimation);
 
    void process_otf_mat(py::object const & py_otf_mat, OCSC const & po_default_csc);
 
@@ -289,12 +295,15 @@ class OBPOTF
     * @param p[in]            Phisical error to initialize the bp_decoder.
     * @param noise_type[in]   Type of the noise source.
     * @param transfer_mat[in] Transference matrix to try to simplify the decoding process.
+    * @param decimation[in] The decimation value for the non-chosen columns after OTF.
     *******************************************************************************************************************/
    OBPOTF(py::object const & pcm, float const & p,
             ENoiseType_t const noise_type,
             py::object const & py_otf_mat,
             py::object const & ps_ext_bp_iters,
-            SDemData_t const * ps_ext_dem_data);
+            SDemData_t const * ps_ext_dem_data,
+            double decimation = 1e-9
+         );
 
    /********************************************************************************************************************
     * @brief Delete default constructor, to avoid empty objects.
