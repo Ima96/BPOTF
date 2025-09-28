@@ -64,13 +64,14 @@ PYBIND11_MODULE(BPOTF, mBPOTF) {
    // Export class's public methods.
    py_BPOTF
       .def(py::init<py::object const &, float const &, 
-                     ENoiseType_t const, py::object const &, py::object const &, SDemData_t const *>(),
-            py::arg("pcm"),   // Parity-check matrix parameter
-            py::arg("p"),     // Physical error probability
-            py::arg("noise_type") = ENoiseType_t::E_CC,   // Noise model type. Default: E_CC
-            py::arg("po_otf_csc_mat") = py::none(),   // Specific matrix to which apply OTF procedure
-            py::arg("po_ext_bp_iters") = py::none(),  // External BP max iterations (array of ints)
-            py::arg("ps_ext_dem_data") = py::none(),  // External DEM data
+                     ENoiseType_t const, py::object const &, py::object const &, SDemData_t const *, double const &>(),
+            py::arg("pcm"),                                 // Parity-check matrix parameter
+            py::arg("p"),                                   // Physical error probability
+            py::arg("noise_type") = ENoiseType_t::E_CC,     // Noise model type. Default: E_CC
+            py::arg("po_otf_csc_mat") = py::none(),         // Specific matrix to which apply OTF procedure
+            py::arg("po_ext_bp_iters") = py::none(),        // External BP max iterations (array of ints)
+            py::arg("ps_ext_dem_data") = py::none(),        // External DEM data
+            py::arg("decimation") = 1e-9,                   // Default decimation value
             docstr_bpotf_constructor
          );
    py_BPOTF.def("decode", &OBPOTF::decode);
