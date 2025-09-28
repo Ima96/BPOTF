@@ -187,8 +187,7 @@ class OBPOTF
                                  ENoiseType_t const & noise_type,
                                  py::object const & py_otf_mat,
                                  py::object const & po_ext_bp_iters,
-                                 SDemData_t const * const ps_ext_dem_data,
-                                 double const & decimation);
+                                 SDemData_t const * const ps_ext_dem_data);
    
    /********************************************************************************************************************
     * @brief Sub-routine that is called from the object constructor if it is called with a scipy_csc object. In this 
@@ -201,8 +200,7 @@ class OBPOTF
                                     ENoiseType_t const & noise_type,
                                     py::object const & py_otf_mat,
                                     py::object const & po_ext_bp_iters,
-                                    SDemData_t const * const ps_ext_dem_data,
-                                    double const & decimation);
+                                    SDemData_t const * const ps_ext_dem_data);
 
    void process_otf_mat(py::object const & py_otf_mat, OCSC const & po_default_csc);
 

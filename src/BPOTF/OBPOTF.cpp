@@ -291,8 +291,7 @@ void OBPOTF::OBPOTF_init_from_scipy_csc(py::object const & au8_pcm,
                                           ENoiseType_t const & noise_type,
                                           py::object const & py_otf_mat,
                                           py::object const & po_ext_bp_iters,
-                                          SDemData_t const * const ps_ext_dem_data,
-                                          double const & decimation)
+                                          SDemData_t const * const ps_ext_dem_data)
 {
    // Convert scipy.sparse.csc_matrix to ndarray of uint8_t
    py::object dense_mat = au8_pcm.attr("toarray")();
@@ -305,8 +304,7 @@ void OBPOTF::OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & au8_pcm,
                                     ENoiseType_t const & noise_type,
                                     py::object const & py_otf_mat,
                                     py::object const & po_ext_bp_iters,
-                                    SDemData_t const * const ps_ext_dem_data,
-                                    double const & decimation)
+                                    SDemData_t const * const ps_ext_dem_data)
 {
    py::buffer_info py_pcm_bufinfo = au8_pcm.request();
 
@@ -550,6 +548,7 @@ void OBPOTF::print_object(void)
 {
    std::cout << "m_u64_pcm_rows: " << m_u64_pcm_rows << std::endl;
    std::cout << "m_u64_pcm_cols: " << m_u64_pcm_cols << std::endl;
+   std::cout << "m_f64_decimation: " << m_f64_decimation<< std::endl;
 
    // std::cout << "m_au64_index_array: " << std::endl;
    // for (uint64_t u64_idx = 0U; u64_idx < m_au64_index_array.size(); ++u64_idx)
@@ -557,7 +556,7 @@ void OBPOTF::print_object(void)
    // std::cout << std::endl;
 
    std::cout << "m_ps_bp_max_iterations->m_pcm_bp_iters: " << m_ps_bp_max_iterations->m_pcm_bp_iters << std::endl;
-   std::cout << "m_ps_bp_max_iterations->m_pehn_bp_iters: " << m_ps_bp_max_iterations->m_phen_bp_iters<< std::endl;
+   std::cout << "m_ps_bp_max_iterations->m_phen_bp_iters: " << m_ps_bp_max_iterations->m_phen_bp_iters<< std::endl;
    std::cout << "m_ps_bp_max_iterations->m_otf_bp_iters: " << m_ps_bp_max_iterations->m_otf_bp_iters << std::endl;
 
 }
@@ -618,7 +617,8 @@ py::array_t<uint8_t> OBPOTF::bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> const
       STOP_CHRONO("OTF: ")
 
       // std::vector<double> updated_llrs(m_ps_dem_data->po_phen_pcm_csc->get_col_num() , vfc_initial_llr_value);
-      std::vector<double> updated_llrs(m_po_otf_csc_mat->get_col_num() , 1e-9); // TODO, this 1e-9 should be a class attribute named decimation.
+      // TODO: this 1e-9 should be a class attribute named decimation.
+      std::vector<double> updated_llrs(m_po_otf_csc_mat->get_col_num(), m_f64_decimation); 
       uint64_t u64_col_chosen_sz = columns_chosen.size();
       // std::cout << "CPP OTF column chosen num: " << u64_col_chosen_sz << std::endl;
       for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
@@ -684,7 +684,7 @@ py::array_t<uint8_t> OBPOTF::bp_bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> co
          // std::vector<double> updated_llrs(m_ps_dem_data->po_phen_pcm_csc->get_col_num() , vfc_initial_llr_value);
          std::vector<double> updated_llrs(m_po_otf_csc_mat->get_col_num() , 0);
          uint64_t u64_col_chosen_sz = columns_chosen.size();
-         std::cout << "CPP OTF column chosen num: " << u64_col_chosen_sz << std::endl;
+         // std::cout << "CPP OTF column chosen num: " << u64_col_chosen_sz << std::endl;
          for (uint64_t u64_idx = 0U; u64_idx < u64_col_chosen_sz; ++u64_idx)
          {
             uint64_t u64_col_idx = columns_chosen[u64_idx];
@@ -698,23 +698,23 @@ py::array_t<uint8_t> OBPOTF::bp_bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> co
          }
          
          //// TO DELETE
-         std::cout << std::setprecision(20);
-          // Print the three lowest and three largest values of updated_llrs[u64_col_idx]
-          std::vector<double> nonzero_llrs;
-          for (auto val : updated_llrs) {
-            if (val != 0) nonzero_llrs.push_back(val);
-          }
-          if (!nonzero_llrs.empty()) {
-            std::sort(nonzero_llrs.begin(), nonzero_llrs.end());
-            std::cout << "Three lowest updated_llrs: ";
-            for (size_t i = 0; i < std::min<size_t>(3, nonzero_llrs.size()); ++i)
-               std::cout << nonzero_llrs[i] << " ";
-            std::cout << std::endl;
-            std::cout << "Three largest updated_llrs: ";
-            for (size_t i = 0; i < std::min<size_t>(3, nonzero_llrs.size()); ++i)
-               std::cout << nonzero_llrs[nonzero_llrs.size() - 1 - i] << " ";
-            std::cout << std::endl;
-          }
+         // std::cout << std::setprecision(20);
+         //  // Print the three lowest and three largest values of updated_llrs[u64_col_idx]
+         //  std::vector<double> nonzero_llrs;
+         //  for (auto val : updated_llrs) {
+         //    if (val != 0) nonzero_llrs.push_back(val);
+         //  }
+         //  if (!nonzero_llrs.empty()) {
+         //    std::sort(nonzero_llrs.begin(), nonzero_llrs.end());
+         //    std::cout << "Three lowest updated_llrs: ";
+         //    for (size_t i = 0; i < std::min<size_t>(3, nonzero_llrs.size()); ++i)
+         //       std::cout << nonzero_llrs[i] << " ";
+         //    std::cout << std::endl;
+         //    std::cout << "Three largest updated_llrs: ";
+         //    for (size_t i = 0; i < std::min<size_t>(3, nonzero_llrs.size()); ++i)
+         //       std::cout << nonzero_llrs[nonzero_llrs.size() - 1 - i] << " ";
+         //    std::cout << std::endl;
+         //  }
 
           ////
          // m_po_otf_bp->initial_log_prob_ratios = updated_llrs;
