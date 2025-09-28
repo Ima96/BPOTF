@@ -24,13 +24,37 @@
 #include <pybind11/numpy.h>
 
 // Custom includes
+#include "SDemData/SDemData.h"
 #include "CSC/OCSC.h"
+#include "CSR/OCSR.h"
 #include "../ldpc_v2_src/bp.hpp"
 
 namespace py = pybind11;
 
 #define C_FMT py::array::c_style
 #define F_FMT py::array::f_style
+
+#define ST1_DEFAULT_MAX_BP 30
+#define ST2_DEFAULT_MAX_BP 100
+#define ST3_DEFAULT_MAX_BP 100
+
+/***********************************************************************************************************************
+ *    Public helper functions
+ **********************************************************************************************************************/
+void initialize_BPOTF_dependencies(void);
+
+/********************************************************************************************************************
+ * @typedef ENoiseType_t
+ * @brief   This typedef holds the different noise models that can be passed to the decoder. Depending on the type
+ *          passed, the decoder could also use (by input argument or trying to obtaining it) a transference matrix
+ *          to simplify the decoding procedure.
+ *******************************************************************************************************************/
+typedef enum ENoiseType
+{
+   E_CC     = 0,  //!< Code Capacity (Default mode).
+   E_PHEN   = 1,  //!< Phenomenological.
+   E_CLN    = 2   //!< Circuit-level noise.
+} ENoiseType_t;
 
 class OBPOTF
 {
@@ -45,16 +69,96 @@ class OBPOTF
    uint64_t m_u64_pcm_rows;
    //! Parity check matrix number of columns.
    uint64_t m_u64_pcm_cols;
+   //! Decimation attribute for the columns not selected in the OTF, defaults to 1e-9
+   double m_f64_decimation = 1e-9;
 
+   // TODO: Rename to specify explicitly that it is the pcm matrix
    //! Matrix in Compressed-Sparse-Column format.
    OCSC * m_po_csc_mat = nullptr;
 
+   OCSC * m_po_otf_csc_mat = nullptr;
+
+   typedef struct SIBpMaxIters
+   {
+      int m_pcm_bp_iters = ST1_DEFAULT_MAX_BP;
+
+      int m_phen_bp_iters = ST2_DEFAULT_MAX_BP;
+
+      int m_otf_bp_iters = ST3_DEFAULT_MAX_BP;
+
+      SIBpMaxIters() = default;
+
+      ~SIBpMaxIters() = default;
+
+   } SIBpMaxIters_t;
+
+   SIBpMaxIters_t * m_ps_bp_max_iterations;
+
+   typedef struct SIDemData
+   {
+      //! Variable that indicates if it is possible to perform 2 stage bp.
+      bool m_bp_bp_otf_enable = false;
+
+      //! Transfer matrix in case a DEM is provided.
+      OCSR * po_transfer_csr_mat = nullptr;
+
+      //!< Observables CSC matrix in case DEM is provided.
+      OCSR * po_obs_csr_mat = nullptr;
+
+      //!< Phenomenological CSC matrix of the pcm.
+      OCSC * po_phen_pcm_csc = nullptr;
+
+      //!< Phenomenological CSC matrix of the observables.
+      OCSR * po_phen_obs_csr = nullptr;
+
+      //!< Array of prior probabilities
+      std::vector<double> af64_priors;
+
+      // Constructors
+      SIDemData() = delete;
+
+      SIDemData(SDemData_t const * const ps_ext_dem_data);
+
+      // Destructors
+      ~SIDemData() = default;
+
+      private:
+      template<typename T>
+      inline bool check_member(py::object const & po_obj)
+      {
+         bool ret_val = false;
+
+         ret_val = !po_obj.is_none();
+
+         if (true == ret_val)
+         {
+            ret_val = py::isinstance<py::array_t<T>>(po_obj);
+         }
+
+         return ret_val;
+      }
+
+      bool check_members(SDemData_t const * const ps_ext_dem_data);
+
+   } SIDemData_t;
+
+   SIDemData_t * m_ps_dem_data = nullptr;
+
    //! Pointer to the pcm in format for BpDecoder object
-   ldpc::bp::BpSparse * m_po_bpsparse = nullptr;
-   //! Pointer to primary BP decoder object.
-   ldpc::bp::BpDecoder * m_po_primary_bp = nullptr;
-   //! Pointer to secondary BP decoder in case the first one fails and Kruskal is needed. 
-   ldpc::bp::BpDecoder * m_po_secondary_bp = nullptr;
+   ldpc::bp::BpSparse * m_po_bpsparse_pcm = nullptr;
+   //! Pointer to the phenomenological pcm in format for BpDecoder object
+   ldpc::bp::BpSparse * m_po_bpsparse_phen_pcm = nullptr;
+   //! Pointer to the bpsparse object used for the post-OTF BpDecoder object.
+   ldpc::bp::BpSparse * m_po_bpsparse_otf = nullptr;
+   //! Pointer to BP decoder object to use it against the pcm.
+   ldpc::bp::BpDecoder * m_po_pcm_bp = nullptr;
+   //! Pointer to BP decoder object to use it against the phenomenological pcm in case there is one.
+   ldpc::bp::BpDecoder * m_po_phen_bp = nullptr;
+   //! Pointer to BP decoder in case the OTF is performed and use BP against its result. 
+   ldpc::bp::BpDecoder * m_po_otf_bp = nullptr;
+
+   //! Member variable that indicates wether the decoding process has converged or not.
+   bool m_b_converged = 0U;
 
    //! Array that holds indexes from 0 to m_u64_pcm_cols-1 to be sorted.
    std::vector<uint64_t> m_au64_index_array;
@@ -68,65 +172,91 @@ class OBPOTF
    public:
 
    /********************************************************************************************************************
-    * @typedef ECodeType_t
-    * @brief   This typedef is an enumeration type that indicates the different error sources that are supported for 
-    *          decodification.
-    *******************************************************************************************************************/
-   typedef enum 
-   {
-      E_GENERIC   = 0,  //!< Default mode
-      E_CLN       = 1   //!< Circuit-level noise 
-   } ECodeType_t;
-
-   /********************************************************************************************************************
     * PRIVATE CLASS METHOD DECLARATION
     *******************************************************************************************************************/
    private:
 
    /********************************************************************************************************************
+    * @brief Sub-routine that is called from the object constructor if it is called with a numpy array. It initialized 
+    *        the object members from input parameters and executes necessary pre-processings.
+    * 
+    * @param pcm[in] Parity-check matrix from which to initialize the members.
+    * @param decimation[in] The decimation value for the non-chosen columns after OTF.
+    *******************************************************************************************************************/
+   void OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & pcm,
+                                 ENoiseType_t const & noise_type,
+                                 py::object const & py_otf_mat,
+                                 py::object const & po_ext_bp_iters,
+                                 SDemData_t const * const ps_ext_dem_data);
+   
+   /********************************************************************************************************************
+    * @brief Sub-routine that is called from the object constructor if it is called with a scipy_csc object. In this 
+    *        case, the object is converted to a pyarray and the the OBPOTF_init_from_numpy is called with it. 
+    * 
+    * @param pcm[in] Parity-check matrix from which to initialize the members.
+    * @param decimation[in] The decimation value for the non-chosen columns after OTF.
+    *******************************************************************************************************************/
+   void OBPOTF_init_from_scipy_csc(py::object const & pcm,
+                                    ENoiseType_t const & noise_type,
+                                    py::object const & py_otf_mat,
+                                    py::object const & po_ext_bp_iters,
+                                    SDemData_t const * const ps_ext_dem_data);
+
+   void process_otf_mat(py::object const & py_otf_mat, OCSC const & po_default_csc);
+
+   /********************************************************************************************************************
     * @brief This routine performs the OTF algorithm using the clasical Unified-Find method.
     * 
-    * @param llrs[in]   The llrs is a vector containing the probabilities of the PCM columns.
+    * // TODO: Add documentation about po_csc_mat
+    * @param probs[in]   The llrs is a vector containing the probabilities of the PCM columns.
     * @return std::vector<uint64_t> The return value is a vector containing the recovered error.
     *******************************************************************************************************************/
-   std::vector<uint64_t> otf_classical_uf(std::vector<double> const & llrs);
+   std::vector<uint64_t> otf_classical_uf_probs(OCSC const * const po_csc_mat, std::vector<double> const & probs);
 
    /********************************************************************************************************************
-    * @brief This routine performs the OTF algorithm.
+    * @brief This routine performs the OTF algorithm against the channel probabilities.
     * 
-    * @param llrs[in]   The llrs is a vector containing the probabilities of the PCM columns.
+    * // TODO: Add documentation about po_csc_mat
+    * @param probs[in]   The probs parameter is a vector containing the probabilities of the PCM columns.
     * @return std::vector<uint64_t> The return value is a vector containing the recovered error.
     *******************************************************************************************************************/
-   std::vector<uint64_t> otf_uf(std::vector<double> const & llrs);
+   std::vector<uint64_t> otf_uf_probs(OCSC const * const po_csc_mat, std::vector<double> const & probs);
 
    /********************************************************************************************************************
-    * @brief This routine returns a vector of the sorted indexes based on the probabilities of the llrs. It copies the 
-    *        initial vector with the unsorted indexes from the member variable m_au64_index_array.
+    * @brief This routine returns a vector of the sorted indexes based on the channel probabilities. It copies the 
+    *        initial vector with the unsorted indexes from the member variable m_au64_index_array. Sorting from 
+    *        greatest to smallest.
     * 
-    * @param llrs[in]   The llrs is a vector containing the probabilities of the PCM columns.
-    * @return std::vector<uint64_t> The return variable is a vector with the sorted indexes according the llrs.
+    * @param probs[in]   The probs parameter is a vector containing the probabilities of the PCM columns.
+    * @return std::vector<uint64_t> The return variable is a vector with the sorted indexes according the probs.
     *******************************************************************************************************************/
-   std::vector<uint64_t> sort_indexes(py::array_t<double> const & llrs);
+   std::vector<uint64_t> sort_probs_indexes(py::array_t<double> const & probs);
 
    /********************************************************************************************************************
     * @brief This routine returns a sorted vector of pointers to the sorted indexes stored in the member variable
-    *        m_au64_index_array, based on the probabilities in the llrs.
+    *        m_au64_index_array, based on the channel probabilities. Sorting from greatest to smallest.
     * 
-    * @param llrs[in]   The llrs is a vector containing the probabilities of the PCM columns.
+    * @param probs[in]   The probs parameter is a vector containing the probabilities of the PCM columns.
     * @return std::vector<uint64_t *> The return variable is a sorted vector of pointers to the indexes based on the
-    *                                 llrs.
+    *                                 probs.
     *******************************************************************************************************************/
-   std::vector<uint64_t *> sort_indexes_nc(std::vector<double> const & llrs);
+   std::vector<uint64_t *> sort_probs_indexes_nc(std::vector<double> const & probs);
 
    /********************************************************************************************************************
     * @brief This routine returns a sorted vector of pointers to the sorted indexes stored in the member variable
-    *        m_au64_index_array, based on the probabilities in the llrs.
+    *        m_au64_index_array, based on the channel probabilities. Sorting from greatest to smallest.
     * 
-    * @param llrs[in]   The llrs is a span containing the probabilities of the PCM columns.
+    * @param probs[in]   The llrs is a span containing the probabilities of the PCM columns.
     * @return std::vector<uint64_t *> The return variable is a sorted vector of pointers to the indexes based on the
-    *                                 llrs.
+    *                                 probs.
     *******************************************************************************************************************/
-   std::vector<uint64_t *> sort_indexes_nc(std::span<double> const & llrs);
+   std::vector<uint64_t *> sort_probs_indexes_nc(std::span<double> const & probs);
+
+   double compute_probability_from_log(double const & f64_log_val);
+
+   std::vector<double> get_probs_from_llrs(std::vector<double> const & vec_f_llrs);
+
+   std::vector<double> propagate(std::vector<double> const & vec_f_llrs);
 
    /********************************************************************************************************************
     * @brief This routine executes a generic decode procedure, which is done for surface-codes. It is registered as a 
@@ -136,7 +266,9 @@ class OBPOTF
     * @param syndrome[in]  A python array in c-style format that indicates the syndrome from which recover the error.
     * @return py::array_t<uint8_t> Output python array with the resulting recovered error.
     *******************************************************************************************************************/
-   py::array_t<uint8_t> generic_decode(py::array_t<uint8_t, C_FMT> const & syndrome);
+   py::array_t<uint8_t> bp_otf_cc_decode(py::array_t<uint8_t, C_FMT> const & syndrome);
+
+   py::array_t<uint8_t> bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> const & syndrome);
 
    /********************************************************************************************************************
     * @brief This routine executes the decoding process for circuit-level noise type of errors. It is registered as a 
@@ -146,7 +278,7 @@ class OBPOTF
     * @param syndrome[in]  A python array in c-style format that indicates the syndrome from which recover the error.
     * @return py::array_t<uint8_t> Output python array with the resulting recovered error.
     *******************************************************************************************************************/
-   py::array_t<uint8_t> cln_decode(py::array_t<uint8_t, C_FMT> const & syndrome);
+   py::array_t<uint8_t> bp_bp_otf_cln_decode(py::array_t<uint8_t, C_FMT> const & syndrome);
 
    /********************************************************************************************************************
     * PUBLIC CLASS METHOD DECLARATION
@@ -157,27 +289,19 @@ class OBPOTF
     * @brief Construct a new OBPOTF object from the input values. It calls other sub-routines depending on the python 
     *        object that is passed as a parameter.
     * 
-    * @param pcm[in]       Parity check matrix. It is passed as a py::object for speed and avoid copying the matrix.
-    * @param p[in]         Phisical error to initialize the bp_decoder.
-    * @param code_type[in] Type of the error source.
+    * @param pcm[in]          Parity check matrix. It is passed as a py::object for speed and avoid copying the matrix.
+    * @param p[in]            Phisical error to initialize the bp_decoder.
+    * @param noise_type[in]   Type of the noise source.
+    * @param transfer_mat[in] Transference matrix to try to simplify the decoding process.
+    * @param decimation[in] The decimation value for the non-chosen columns after OTF.
     *******************************************************************************************************************/
-   OBPOTF(py::object const & pcm, float const & p, ECodeType_t const code_type = E_GENERIC);
-
-   /********************************************************************************************************************
-    * @brief Sub-routine that is called from the object constructor if it is called with a numpy array. It initialized 
-    *        the object members from input parameters and executes necessary pre-processings.
-    * 
-    * @param pcm[in] Parity-check matrix from which to initialize the members.
-    *******************************************************************************************************************/
-   void OBPOTF_init_from_numpy(py::array_t<uint8_t, F_FMT> const & pcm);
-   
-   /********************************************************************************************************************
-    * @brief Sub-routine that is called from the object constructor if it is called with a scipy_csc object. In this 
-    *        case, the object is converted to a pyarray and the the OBPOTF_init_from_numpy is called with it. 
-    * 
-    * @param pcm[in] Parity-check matrix from which to initialize the members.
-    *******************************************************************************************************************/
-   void OBPOTF_init_from_scipy_csc(py::object const & pcm);
+   OBPOTF(py::object const & pcm, float const & p,
+            ENoiseType_t const noise_type,
+            py::object const & py_otf_mat,
+            py::object const & ps_ext_bp_iters,
+            SDemData_t const * ps_ext_dem_data,
+            double decimation = 1e-9
+         );
 
    /********************************************************************************************************************
     * @brief Delete default constructor, to avoid empty objects.
@@ -190,14 +314,14 @@ class OBPOTF
    ~OBPOTF();
 
    /********************************************************************************************************************
-    * @brief This routine performs the OTF algorithm.
+    * @brief This routine performs the OTF algorithm against the channel probabilities.
     * 
     * (It is public right now because Ton needed only this part of the algorithm for some tests)
     * 
-    * @param llrs[in]   The llrs is a vector containing the probabilities of the PCM columns.
+    * @param probs[in]   The probs parameter is a vector containing the probabilities of the PCM columns.
     * @return py::array_t<uint64_t> The return value is a py::array_t containing the recovered error.
     *******************************************************************************************************************/
-   py::array_t<uint64_t> otf_uf(py::array_t<double, C_FMT> const & llrs);
+   py::array_t<uint64_t> otf_uf_probs(py::array_t<double, C_FMT> const & probs);
 
    /********************************************************************************************************************
     * @brief This is the main decoding routine. This routine calls the registered callback function in 
@@ -212,6 +336,29 @@ class OBPOTF
     * @brief Prints the object's member. Developing purposes and testing.
     *******************************************************************************************************************/
    void print_object(void);
+
+   inline bool has_converged(void)
+   {
+      return m_b_converged;
+   }
+
+#if defined(DEBUG_OBPOTF)
+   py::array_t<uint8_t> getPcm(void);
+   py::array_t<uint8_t> getPhenPcm(void);
+   py::array_t<uint8_t> getObs(void);
+   py::array_t<uint8_t> getTransfMat(void);
+   py::array_t<double> getPriors(void);
+
+   inline uint64_t get_cols(void) { return m_u64_pcm_cols; }
+   inline uint64_t get_rows(void) { return m_u64_pcm_rows; }
+   inline uint64_t get_cols_obs(void) { return m_ps_dem_data->po_obs_csr_mat->get_col_num(); }
+   inline uint64_t get_rows_obs(void) { return m_ps_dem_data->po_obs_csr_mat->get_row_num(); }
+   inline uint64_t get_cols_phen_pcm(void) { return m_ps_dem_data->po_phen_pcm_csc->get_col_num(); }
+   inline uint64_t get_rows_phen_pcm(void) { return m_ps_dem_data->po_phen_pcm_csc->get_row_num(); }
+   inline uint64_t get_cols_transf(void) { return m_ps_dem_data->po_transfer_csr_mat->get_col_num(); }
+   inline uint64_t get_rows_transf(void) { return m_ps_dem_data->po_transfer_csr_mat->get_row_num(); }
+#endif
+
 };
 
 #endif // OBPOTF_H_

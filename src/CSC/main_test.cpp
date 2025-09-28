@@ -39,8 +39,8 @@ int main(void)
    OCSC o_csc_mat(matrix);
    cout << "Constructed from Matrix:\n";
    o_csc_mat.print_csc();
-   //u8_expanded_mat = o_csc_mat.expand();
-   printMat(o_csc_mat.expand());
+   //u8_expanded_mat = o_csc_mat.expand_to_mat();
+   printMat(o_csc_mat.expand_to_mat());
    cout << "Number of nnz in column 1: " << o_csc_mat.get_col_nnz(1) << endl;
    vector<uint64_t> col1_nnz_idxs = o_csc_mat.get_col_row_idxs(1);
    cout << "Indeces of nnz in column 1: ";
@@ -51,19 +51,19 @@ int main(void)
    cout << "Inserting tests:" << endl;
    o_csc_mat.add_row_idx(5, 2);
    cout << " - Added an entry\n";
-   printMat(o_csc_mat.expand());
+   printMat(o_csc_mat.expand_to_mat());
    o_csc_mat.add_row_idx(5, 3);
    cout << " - Added an entry\n";
-   printMat(o_csc_mat.expand());
+   printMat(o_csc_mat.expand_to_mat());
    o_csc_mat.add_row_idx(2, 3);
    cout << " - Added an entry\n";
-   printMat(o_csc_mat.expand());
+   printMat(o_csc_mat.expand_to_mat());
    o_csc_mat.add_row_idx(0, 3);
    cout << " - Added an entry\n";
-   printMat(o_csc_mat.expand());
+   printMat(o_csc_mat.expand_to_mat());
    o_csc_mat.add_row_idx(1, 1);
    cout << " - Added an entry\n";
-   printMat(o_csc_mat.expand());
+   printMat(o_csc_mat.expand_to_mat());
    o_csc_mat.print_csc();
 
    OCSC o_csc_cm_mat(u8_cm_mat_vec, 5);

@@ -1,7 +1,12 @@
 [build-system]
 requires = [
    "setuptools>=42",
-   "pybind11>=2.10.0"
+   # "pybind11>=2.10.0",
+   "wheel",
+   "cmake>=3.24",
+   "pybind11-stubgen",
+   # Necessary installations for pip build environment to generate stubs
+   "scipy"
 ]
 build-backend = "setuptools.build_meta"
 
@@ -19,9 +24,14 @@ license = { file = "LICENSE" }
 
 requires-python = ">=3.8"
 dependencies = [
-   "scipy"
+   "scipy",
+   # "beliefmatching",
+   "stim",
+   "sinter",
+   "numpy",
+   "ldpc"
 ]
-version = "0.0.1"
+dynamic = ["version"]
 
 [tool.setuptools.packages.find]
 where = ["src"]  

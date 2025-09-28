@@ -7,3 +7,10 @@ CMakeFiles/
 CMakeCache.txt
 *.egg-info/
 *.so
+*.txt
+!bpbpotf*.txt
+!bposd*.txt
+test_scripts/DEM/SlidingWindowDecoder
+*_test
+test_scripts/DEM/results/bposd
+test_scripts/DEM/results/bpbpotf

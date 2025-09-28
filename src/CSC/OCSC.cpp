@@ -263,7 +263,7 @@ void OCSC::print_csc(void)
 
 }
 
-std::vector<std::vector<uint8_t>> OCSC::expand(void)
+std::vector<std::vector<uint8_t>> OCSC::expand_to_mat(void) const
 {
    std::vector<std::vector<uint8_t>> res_mat(m_u64_m, std::vector<uint8_t>(m_u64_n, 0U));
 
@@ -279,7 +279,37 @@ std::vector<std::vector<uint8_t>> OCSC::expand(void)
    return res_mat;
 }
 
-uint64_t OCSC::get_col_nnz(uint64_t const & u64_col)
+std::vector<uint8_t> OCSC::expand_to_column_major(void)
+{
+   std::vector<uint8_t> res_vec(m_u64_m * m_u64_n, 0U);
+
+   for (uint64_t i = 1U; i < m_u64_n+1; i++)
+   {
+      for (uint64_t j = m_pu64_indptr[i-1]; j < m_pu64_indptr[i]; j++)
+      {
+         uint64_t row_idx = m_pu64_r_indices[j];
+         res_vec[((i-1)*m_u64_m)+row_idx] = 1U;
+      }
+   }
+
+   return res_vec;
+}
+
+std::vector<uint8_t> OCSC::expand_to_row_major(void)
+{
+   std::vector<uint8_t> res_vec;
+
+   std::vector<std::vector<uint8_t>> ppu8_exp_mat = this->expand_to_mat();
+
+   for (uint64_t u64_i = 0U; u64_i < m_u64_m; ++u64_i)
+   {
+      res_vec.insert(res_vec.end(), ppu8_exp_mat[u64_i].begin(), ppu8_exp_mat[u64_i].end());
+   }
+
+   return res_vec;
+}
+
+uint64_t OCSC::get_col_nnz(uint64_t const & u64_col) const
 {
    if (u64_col > m_u64_n)
    {
@@ -289,7 +319,7 @@ uint64_t OCSC::get_col_nnz(uint64_t const & u64_col)
    return m_pu64_indptr[u64_col+1] - m_pu64_indptr[u64_col];
 }
 
-std::vector<uint64_t> OCSC::get_col_row_idxs(uint64_t const & u64_col)
+std::vector<uint64_t> OCSC::get_col_row_idxs(uint64_t const & u64_col) const
 {
    std::vector<uint64_t> u64_res_vec;
    uint64_t u64_col_nnz = this->get_col_nnz(u64_col);
@@ -305,7 +335,7 @@ std::vector<uint64_t> OCSC::get_col_row_idxs(uint64_t const & u64_col)
    return u64_res_vec;
 }
 
-std::span<uint64_t> OCSC::get_col_row_idxs_fast(uint64_t const & u64_col)
+std::span<uint64_t> OCSC::get_col_row_idxs_fast(uint64_t const & u64_col) const
 {
    std::span<uint64_t> u64_res_sp;
    uint64_t u64_col_nnz = this->get_col_nnz(u64_col);
