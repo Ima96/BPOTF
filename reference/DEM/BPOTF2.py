@@ -57,7 +57,7 @@ class UFCLN:
         self.obs_phen = self.obs[:,np.where(columns_to_consider==1)[0]]
         
 
-        self.transf_M = conts['transfMat'].toarray()
+        self.transf_M = conts['transfMat']
         del conts
         
         max_numb_cols = 0

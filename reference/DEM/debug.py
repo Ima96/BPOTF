@@ -94,7 +94,7 @@ bp_iterations = np.array([35, -1, 800], dtype=np.int32)
 print(type(bp_iterations))
 
 bpbp_otf_v2 = BPOTF.OBPOTF(bm.check_matrix, p, BPOTF.NoiseType.E_CLN,
-                           ps_ext_dem_data=dem_data, po_ext_bp_iters=bp_iterations)
+                           ps_ext_dem_data=dem_data, po_ext_bp_iters=bp_iterations, decimation=1e-9)
 bpbp_otf_v2.print_object()
 bposd = bposd_decoder(
     bm.check_matrix,
