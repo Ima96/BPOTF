@@ -88,48 +88,56 @@ class CMakeBuild(build_ext):
         # Run the build process
         super().run()
 
-        if not is_editable_install:
-            module_name = self.extensions[0].module_name
-            extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(module_name)))
-            extdir = os.path.join(extdir, module_name)
-            os.makedirs(extdir, exist_ok=True)
-
-            # Generate __init__.py in the output folder
-            init_file = os.path.join(extdir, "__init__.py")
-            with open(init_file, "w") as f:
-                f.write("# This file is generated during installation\n")
-                f.write("from .BPOTF import *\n")
-                f.write("from .BPOTF import __version__\n")
-                f.write("__all__ = ['__version__']\n")
     
 class CustomInstallCommand(install):
     def run(self):
         super().run()
 
-        self.generate_stubs()
+        if not is_editable_install:
+            self.install_files()
 
-    def generate_stubs(self):
-        print("INFO -- Generating stubs!")
+    def install_files(self):
+
         build_ext_cmd = self.get_finalized_command("build_ext")
         module_name = build_ext_cmd.extensions[0].module_name
+        source_dir = build_ext_cmd.extensions[0].sourcedir
         build_temp = build_ext_cmd.build_temp
+        extdir = os.path.join(self.install_lib, module_name)
+        os.makedirs(extdir, exist_ok=True)
 
-        env = os.environ.copy()
-        env['PYTHONPATH'] = self.build_lib + os.pathsep + env.get('PYTHONPATH', '')
+        # Generate __init__.py in the output folder
+        init_file = os.path.join(extdir, "__init__.py")
+        with open(init_file, "w") as f:
+            f.write("# This file is generated during installation\n")
+            f.write("from .BPOTF import *\n")
+            f.write("from .BPOTF import __version__\n")
+        # print("INFO -- Generating stubs!")
+        #
+        # env = os.environ.copy()
+        # env['PYTHONPATH'] = self.build_lib + os.pathsep + env.get('PYTHONPATH', '')
+        #
+        # stubgen_cmd = ["pybind11-stubgen", 
+        #                "--enum-class-locations", "NoiseType:BPOTF.BPOTF.NoiseType", 
+        #                "-o"]
+        #
+        # # extdir = os.path.abspath(os.path.dirname(build_ext_cmd.get_ext_fullpath(module_name)))
+        # stubs_out_dir = os.path.join(build_temp, "stubs")
+        #
+        # subprocess.check_call(stubgen_cmd + [stubs_out_dir, module_name], env=env)
+        #
+        # bpotf_stub_filepath = os.path.join(stubs_out_dir, module_name, "BPOTF.pyi")
+        # dest_path = os.path.join(self.install_lib, module_name, "BPOTF.pyi")
+        # shutil.copyfile(bpotf_stub_filepath, dest_path)
+        # print(f"INFO -- Stub files copied to {dest_path}")
         
-        stubgen_cmd = ["pybind11-stubgen", 
-                       "--enum-class-locations", "NoiseType:BPOTF.BPOTF.NoiseType", 
-                       "-o"]
-        
-        # extdir = os.path.abspath(os.path.dirname(build_ext_cmd.get_ext_fullpath(module_name)))
-        stubs_out_dir = os.path.join(build_temp, "stubs")
-
-        subprocess.check_call(stubgen_cmd + [stubs_out_dir, module_name], env=env)
-
-        bpotf_stub_filepath = os.path.join(stubs_out_dir, module_name, "BPOTF.pyi")
-        dest_path = os.path.join(self.install_lib, module_name, "BPOTF.pyi")
-        shutil.copyfile(bpotf_stub_filepath, dest_path)
-        print(f"INFO -- Stub files copied to {dest_path}")
+        print(f"INFO -- Copying sinter bpotf decoder file...")
+        sinter_file_path = os.path.join(source_dir, "sinter_bpotf.py")
+        dest_path = os.path.join(self.install_lib, module_name, "sinter_bpotf.py")
+        shutil.copyfile(sinter_file_path, dest_path)
+        with open(init_file, "a") as f:
+            f.write("from .sinter_bpotf import SinterBpOtfDecoder\n")
+            f.write("__all__ = ['__version__']\n")
+        print(f"INFO -- Sinter bpotf decoder file copied to {dest_path}")
         
 
 def compose_version() -> str:
