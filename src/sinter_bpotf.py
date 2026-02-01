@@ -3,7 +3,7 @@ import numpy as np
 import sinter
 import stim
 from BPOTF import OBPOTF, NoiseType, DemData
-from beliefmatching import detector_error_model_to_check_matrices
+#from beliefmatching import detector_error_model_to_check_matrices
 
 from ldpc.ckt_noise.dem_matrices import detector_error_model_to_check_matrices
 
@@ -24,6 +24,11 @@ class SinterBpOtfDecoder(sinter.Decoder):
             phen_check_matrix = None
             ):
         
+		if noise_type != NoiseType.E_CLN:
+            raise ValueError(
+                f"Configuration Error: sinter only should be used for NoiseType.E_CLN..."
+            )
+
         self.m_p = p
         self.m_noise_type = noise_type
         self.m_po_otf_csc_mat = po_otf_csc_mat
@@ -74,7 +79,9 @@ class SinterBpOtfDecoder(sinter.Decoder):
         predictions = np.zeros((num_shots, num_obs), dtype=bool)
 
         for i in range(num_shots):
-            predictions[i, :] = self.decode(shots[i, :])
+            res = self.decode(shots[i, :])
+            print(res)
+            predictions[i, :] = res
 
         stim.write_shot_data_file(data=predictions,
                                   path=obs_predictions_b8_out_path,
