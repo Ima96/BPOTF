@@ -32,6 +32,7 @@ class SinterBpOtfDecoder(sinter.Decoder):
         self.dem_data_phen_check_matrix = phen_check_matrix
         self.transfer_matrix = transfer_matrix
         self.otf_matrix = otf_matrix
+        self.bpotf = None
 
     def decode_via_files(
             self,
@@ -69,7 +70,6 @@ class SinterBpOtfDecoder(sinter.Decoder):
             self.m_po_ext_bp_iters,
             self.m_ps_ext_dem_data
         )
-
         shots = stim.read_shot_data_file(path=dets_b8_in_path, format="b8", num_detectors=num_dets)
         predictions = np.zeros((num_shots, num_obs), dtype=bool)
 
