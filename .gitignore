@@ -5,6 +5,8 @@ __pycache__/
 build/
 CMakeFiles/
 CMakeCache.txt
+.*
+!.gitignore
 *.egg-info/
 *.so
 *.txt
