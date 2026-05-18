@@ -1,4 +1,5 @@
-import BPOTF
+from BPOTF import OBPOTF, NoiseType
+from BPOTF import __version__ as bpotf_version
 import numpy as np
 from scipy import sparse
 
@@ -9,6 +10,8 @@ def generate_random_matrix():
     # Generate a random NxM matrix with 0s and 1s
     matrix = np.random.randint(2, size=(N, M), dtype=np.uint8)
     return matrix
+
+print("BPOTF version: ", bpotf_version)
 
 # Example usage:
 mat = generate_random_matrix()
@@ -24,10 +27,10 @@ print(scipy_mat)
 #bpbp.koh_v2(mat)
 
 print(type(mat))
-bpotf_obj = BPOTF.OBPOTF(mat, 0.01)
+bpotf_obj = OBPOTF(mat, 0.01)
 print("first created")
 print(type(scipy_mat))
-bpotf_obj_scipy = BPOTF.OBPOTF(scipy_mat, 0.01)
+bpotf_obj_scipy = OBPOTF(scipy_mat, 0.01)
 
 bpotf_obj.print_object()
 bpotf_obj_scipy.print_object()
@@ -41,7 +44,3 @@ error_scipy = bpotf_obj_scipy.decode(fake_syndrome)
 assert np.allclose(error, error_scipy), "Errors not equal!"
 
 print("TEST OK")
-
-
-bpotf_obj_cln = BPOTF.OBPOTF(mat, 0.01, BPOTF.ECodeType.E_CLN)
-bpotf_obj_cln.decode(fake_syndrome)
