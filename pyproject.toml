@@ -1,12 +1,8 @@
 [build-system]
 requires = [
    "setuptools>=42",
-   # "pybind11>=2.10.0",
    "wheel",
    "cmake>=3.24",
-   "pybind11-stubgen",
-   # Necessary installations for pip build environment to generate stubs
-   "scipy"
 ]
 build-backend = "setuptools.build_meta"
 
@@ -18,6 +14,7 @@ readme = "README.md"
 authors = [
    { name = "Antonio de Martì i Olius", email = "ademartio@unav.es" },
    { name = "Josu Etxezarreta Martinez", email = "jetxezarreta@unav.es" },
+   { name = "Joschka Roffe", email = "joschka@roffe.eu" },
    { name = "Imanol Etxezarreta Martinez", email = "ietxezarretam@gmail.com" }
 ]
 license = { file = "LICENSE" }
@@ -25,13 +22,15 @@ license = { file = "LICENSE" }
 requires-python = ">=3.8"
 dependencies = [
    "scipy",
-   # "beliefmatching",
    "stim",
    "sinter",
    "numpy",
    "ldpc"
 ]
 dynamic = ["version"]
+
+[project.urls]
+"Source Code" = "https://github.com/Ima96/BPOTF"
 
 [tool.setuptools.packages.find]
 where = ["src"]  

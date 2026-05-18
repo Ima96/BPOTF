@@ -111,33 +111,13 @@ class CustomInstallCommand(install):
             f.write("# This file is generated during installation\n")
             f.write("from .BPOTF import *\n")
             f.write("from .BPOTF import __version__\n")
-        # print("INFO -- Generating stubs!")
-        #
-        # env = os.environ.copy()
-        # env['PYTHONPATH'] = self.build_lib + os.pathsep + env.get('PYTHONPATH', '')
-        #
-        # stubgen_cmd = ["pybind11-stubgen", 
-        #                "--enum-class-locations", "NoiseType:BPOTF.BPOTF.NoiseType", 
-        #                "-o"]
-        #
-        # # extdir = os.path.abspath(os.path.dirname(build_ext_cmd.get_ext_fullpath(module_name)))
-        # stubs_out_dir = os.path.join(build_temp, "stubs")
-        #
-        # subprocess.check_call(stubgen_cmd + [stubs_out_dir, module_name], env=env)
-        #
-        # bpotf_stub_filepath = os.path.join(stubs_out_dir, module_name, "BPOTF.pyi")
-        # dest_path = os.path.join(self.install_lib, module_name, "BPOTF.pyi")
-        # shutil.copyfile(bpotf_stub_filepath, dest_path)
-        # print(f"INFO -- Stub files copied to {dest_path}")
+            f.write("from .sinter_bpotf import SinterBpOtfDecoder\n")
+            f.write("__all__ = ['__version__', 'OBPOTF', 'NoiseType', 'DemData', 'SinterBpOtfDecoder']\n")
         
-        print(f"INFO -- Copying sinter bpotf decoder file...")
+        # Copy the sinter_bpotf.py file to the output folder
         sinter_file_path = os.path.join(source_dir, "sinter_bpotf.py")
         dest_path = os.path.join(self.install_lib, module_name, "sinter_bpotf.py")
         shutil.copyfile(sinter_file_path, dest_path)
-        with open(init_file, "a") as f:
-            f.write("from .sinter_bpotf import SinterBpOtfDecoder\n")
-            f.write("__all__ = ['__version__']\n")
-        print(f"INFO -- Sinter bpotf decoder file copied to {dest_path}")
         
 
 def compose_version() -> str:
@@ -159,7 +139,7 @@ setup(
     version=compose_version(),
     author="Imanol Etxezarreta",
     author_email="ietxezarretam@gmail.com",
-    url="https://github.com/Ademartio/BPOTF",
+    url="https://github.com/Ima96/BPOTF",
     description="Implementation of Belief Propagation Ordered Tanner Forest decoding method.",
     long_description=long_des,
     long_description_content_type="text/markdown",
